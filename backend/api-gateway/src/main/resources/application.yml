@@ -7,7 +7,6 @@ spring:
 service:
     uri:
         users: http://localhost:8082
-        catalog: http://localhost:8081
         artists: http://localhost:8083
         admin: http://localhost:8084
 
@@ -16,10 +15,9 @@ spring:
     config:
         activate:
             on-profile: docker
-            
+
 service:
     uri:
         users: http://users-service:8082
-        catalog: http://catalog-service:8081
         artists: http://artists-service:8083
         admin: http://admin-service:8084

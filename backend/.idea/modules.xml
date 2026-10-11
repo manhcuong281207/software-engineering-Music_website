@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/admin-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/admin-service.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/artists-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/artists-service.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/backend.iml" filepath="$PROJECT_DIR$/.idea/backend.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/catalog-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/catalog-service.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/-86273203/shared-auth-lib.main.iml" filepath="$PROJECT_DIR$/.idea/modules/-86273203/shared-auth-lib.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/users-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/users-service.main.iml" />
+    </modules>
+  </component>
+</project>
