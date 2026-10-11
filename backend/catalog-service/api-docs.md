@@ -1,0 +1,320 @@
+# Hướng dẫn Kiểm thử và Sử dụng API - Catalog Service
+
+Tài liệu này tổng hợp toàn bộ các API thuộc **Catalog Service**.
+**LƯU Ý QUAN TRỌNG:** Tất cả các endpoint dưới đây đều phải được gọi thông qua **API Gateway (Port 8686)** để đảm bảo tính nhất quán, phân quyền và xử lý CORS tự động. Không gọi trực tiếp vào port của Catalog Service.
+
+Base URL cho Catalog Service thông qua Gateway là: `http://localhost:8686/api/catalog`
+
+> Mọi phản hồi (Response) thành công hay thất bại đều tuân theo chuẩn định dạng JSON:
+>
+> ```json
+> {
+>   "success": true/false,
+>   "statusCode": 200/400/...,
+>   "message": "...",
+>   "data": { ... },
+>   "timestamp": "..."
+> }
+> ```
+
+---
+
+## 1. Dành cho Nghệ sĩ (Artist)
+
+**Yêu cầu:** Gửi kèm Header `Authorization: Bearer <ACCESS_TOKEN_CỦA_ARTIST>`.
+
+### 1.1. Đăng tải Bài hát (Upload Song)
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/songs`
+- **Mô tả:** Đăng tải một bài hát mới. Trạng thái mặc định sẽ là `PENDING`. Nếu bài hát thuộc một album mà không điền `trackNumber`, hệ thống sẽ tự động gán `trackNumber` theo thứ tự tiếp theo.
+- **Content-Type:** `multipart/form-data`
+- **Body (Form Data):**
+  - `title` (Text): Tên bài hát (Bắt buộc)
+  - `audioFile` (File): File nhạc mp3/wav (Bắt buộc)
+  - `coverImage` (File): File ảnh bìa (Không bắt buộc)
+  - `albumId` (Text): UUID của Album nếu có (Không bắt buộc)
+  - `trackNumber` (Int): Số thứ tự trong Album. Nếu để trống hệ thống sẽ tự sinh (Không bắt buộc)
+  - `genreIds` (List<UUID>): Danh sách ID Thể loại. (Cách điền form-data: truyền một chuỗi cách nhau bằng dấu phẩy `id1,id2` HOẶC tạo nhiều key có cùng tên `genreIds`). (Bắt buộc)
+  - `explicit` (Boolean): Nội dung nhạy cảm 18+ hay không, mặc định là false (Không bắt buộc)
+
+### 1.2. Lấy danh sách Bài hát của tôi (My Songs)
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/songs`
+- **Mô tả:** Lấy danh sách toàn bộ bài hát mà nghệ sĩ này đã đăng tải.
+
+### 1.3. Tạo Album mới
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/albums`
+- **Mô tả:** Tạo một Album/EP/Single mới. Trạng thái mặc định là `PENDING`.
+- **Content-Type:** `multipart/form-data`
+- **Body:**
+  - `title` (Text): Tên Album (Bắt buộc)
+  - `description` (Text): Mô tả (Không bắt buộc)
+  - `coverImage` (File): File ảnh bìa Album (Không bắt buộc)
+
+### 1.4. Lấy danh sách Album của tôi (My Albums)
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/albums`
+- **Mô tả:** Lấy danh sách toàn bộ Album của nghệ sĩ.
+
+### 1.5. Thêm Bài hát vào Album
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/albums/{albumId}/songs`
+- **Mô tả:** Đưa một bài hát đã đăng tải vào một Album. Nếu không truyền `trackNumber`, hệ thống sẽ tự sinh số thứ tự nằm ở cuối album.
+- **Body (JSON):**
+  ```json
+  {
+    "songId": "uuid-cua-bai-hat",
+    "trackNumber": 1
+  }
+  ```
+
+### 1.6. Thay đổi Thứ tự Bài hát trong Album
+
+- **Method:** `PUT`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/albums/{albumId}/songs/reorder`
+- **Mô tả:** Cập nhật lại số thứ tự (trackNumber) của nhiều bài hát cùng lúc. Dùng cho tính năng kéo thả trên Frontend.
+- **Body (JSON):**
+  ```json
+  {
+    "songOrders": [
+      { "songId": "uuid-bai-1", "trackNumber": 1 },
+      { "songId": "uuid-bai-2", "trackNumber": 2 }
+    ]
+  }
+  ```
+
+### 1.7. Cập nhật Lời bài hát (Lyrics)
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/songs/{songId}/lyrics`
+- **Mô tả:** Thêm mới hoặc cập nhật lời bài hát. (Chỉ chủ sở hữu bài hát mới có quyền).
+- **Body (JSON):**
+  ```json
+  {
+    "content": "Lời bài hát ở đây...",
+    "language": "vi"
+  }
+  ```
+
+### 1.8. Thêm Nghệ sĩ phụ (Feat/Producer)
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/catalog/artist/songs/{songId}/artists`
+- **Mô tả:** Thêm nghệ sĩ tham gia sản xuất bài hát. (Chỉ chủ sở hữu bài hát mới có quyền).
+- **Body (JSON):**
+  ```json
+  {
+    "artistId": "uuid-cua-nghe-si",
+    "role": "FEATURED"
+  }
+  ```
+  _(Các giá trị role hợp lệ: `FEATURED`, `PRODUCER`)_
+
+---
+
+## 2. Dành cho Quản trị viên (Admin)
+
+**Yêu cầu:** Gửi kèm Header `Authorization: Bearer <ACCESS_TOKEN_CỦA_ADMIN>`.
+
+### 2.1. Lấy danh sách Bài hát chờ duyệt
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/admin/songs/pending`
+- **Mô tả:** Lấy tất cả bài hát trên toàn hệ thống đang ở trạng thái `PENDING`.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Định dạng: `field,direction`. Mặc định: `createdAt,desc`.
+
+### 2.2. Cập nhật Trạng thái Bài hát (Duyệt/Từ chối)
+
+- **Method:** `PATCH`
+- **Endpoint:** `http://localhost:8686/api/catalog/admin/songs/{songId}/status`
+- **Mô tả:** Đổi trạng thái bài hát. **Quy tắc nghiệp vụ:** Nếu duyệt (`APPROVED`) một bài hát thuộc Album và đó là bài hát cuối cùng còn PENDING trong Album đó, hệ thống sẽ tự động duyệt Album luôn.
+- **Body (JSON):**
+  ```json
+  {
+    "status": "APPROVED"
+  }
+  ```
+  _(Các giá trị hợp lệ: `APPROVED`, `REJECTED`, `TAKEDOWN`)_
+
+### 2.3. Lấy danh sách Album chờ duyệt
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/admin/albums/pending`
+- **Mô tả:** Lấy tất cả Album trên toàn hệ thống đang ở trạng thái `PENDING`. Dữ liệu trả về được phân trang.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Định dạng: `field,direction`. Mặc định: `createdAt,desc`.
+
+### 2.4. Cập nhật Trạng thái Album (Duyệt/Từ chối)
+
+- **Method:** `PATCH`
+- **Endpoint:** `http://localhost:8686/api/catalog/admin/albums/{albumId}/status`
+- **Mô tả:** Đổi trạng thái album. **Quy tắc nghiệp vụ (Cascade):** Khi Admin cập nhật trạng thái Album, toàn bộ bài hát trong Album đó sẽ tự động được cập nhật theo trạng thái tương tự.
+  - Duyệt (`APPROVED`) Album → Toàn bộ bài hát cũng `APPROVED`.
+  - Từ chối (`REJECTED`) Album → Toàn bộ bài hát cũng `REJECTED`.
+  - Gỡ xuống (`TAKEDOWN`) Album → Toàn bộ bài hát cũng `TAKEDOWN`.
+- **Body (JSON):**
+  ```json
+  {
+    "status": "APPROVED"
+  }
+  ```
+  _(Các giá trị hợp lệ: `APPROVED`, `REJECTED`, `TAKEDOWN`)_
+
+---
+
+## 3. Công khai (Public)
+
+**Yêu cầu:** Không cần Token. Mọi user kể cả chưa đăng nhập đều có thể gọi.
+
+> **Lưu ý về tham số `sort`:**
+> Tham số `sort` nhận giá trị theo định dạng `field,direction` (VD: `playCount,desc`).
+> Nếu field không hợp lệ, hệ thống sẽ tự động fallback về sort mặc định `createdAt,desc` để đảm bảo an toàn.
+
+### 3.1. Lấy danh sách Bài hát Công khai
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/songs`
+- **Mô tả:** Lấy danh sách bài hát đã được Admin duyệt (`APPROVED`).
+- **Query Parameters:**
+  - `keyword` (String, Optional): Tìm kiếm theo tên bài hát (sử dụng toán tử LIKE).
+  - `genreId` (UUID, Optional): Lọc bài hát theo Thể loại.
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Định dạng: `field,direction`. Mặc định: `createdAt,desc`.
+    - **Các giá trị field hợp lệ:** `playCount`, `likeCount`, `createdAt`, `title`
+    - **Ví dụ:** `sort=playCount,desc` (bài hát thịnh hành nhất lên đầu)
+- **Response — Mỗi item trong `content` trả về:**
+  ```json
+  {
+    "id": "uuid",
+    "ownerId": "uuid-nghe-si",
+    "ownerName": "Sơn Tùng M-TP",
+    "title": "Tên bài hát",
+    "durationSeconds": 245,
+    "audioUrl": "https://...",
+    "coverImage": "https://...",
+    "explicit": false,
+    "playCount": 1000000,
+    "likeCount": 50000,
+    "status": "APPROVED",
+    "createdAt": "2026-08-01T10:00:00",
+    "artists": [
+      { "artistId": "uuid", "artistName": "Tên nghệ sĩ", "role": "MAIN" }
+    ],
+    "genres": [{ "id": "uuid", "name": "Pop" }]
+  }
+  ```
+
+### 3.2. Lấy danh sách Thể loại
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/genres`
+- **Mô tả:** Lấy danh sách toàn bộ các Thể loại âm nhạc (Genres).
+
+### 3.3. Lấy danh sách Album Công khai
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/albums`
+- **Mô tả:** Lấy danh sách các Album đã được Admin duyệt (`APPROVED`).
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Định dạng: `field,direction`. Mặc định: `createdAt,desc`.
+    - **Các giá trị field hợp lệ:** `likeCount`, `createdAt`, `title`, `releaseDate`, `totalTracks`
+    - **Ví dụ:** `sort=likeCount,desc` (album được yêu thích nhất lên đầu)
+- **Response — Mỗi item trong `content` trả về:**
+  ```json
+  {
+    "id": "uuid",
+    "ownerId": "uuid-nghe-si",
+    "ownerName": "Sơn Tùng M-TP",
+    "title": "Tên album",
+    "albumType": "ALBUM",
+    "totalTracks": 10,
+    "description": "Mô tả album...",
+    "coverImage": "https://...",
+    "releaseDate": "2026-07-15",
+    "status": "APPROVED",
+    "likeCount": 20000,
+    "createdAt": "2026-07-01T09:00:00"
+  }
+  ```
+
+### 3.4. Lấy danh sách Bài hát của một Nghệ sĩ
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/artists/{artistId}/songs`
+- **Mô tả:** Lấy danh sách các Bài hát công khai (`APPROVED`) do một nghệ sĩ đăng tải.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Các field hợp lệ: `playCount`, `likeCount`, `createdAt`, `title`. Mặc định: `createdAt,desc`.
+
+### 3.5. Lấy danh sách Album của một Nghệ sĩ
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/artists/{artistId}/albums`
+- **Mô tả:** Lấy danh sách các Album công khai (`APPROVED`) do một nghệ sĩ đăng tải.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Các field hợp lệ: `likeCount`, `createdAt`, `title`, `releaseDate`, `totalTracks`. Mặc định: `createdAt,desc`.
+
+### 3.6. Lấy danh sách Bài hát trong một Album
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/albums/{albumId}/songs`
+- **Mô tả:** Lấy danh sách các Bài hát công khai (`APPROVED`) nằm trong một album cụ thể. Sẽ báo lỗi 404 nếu album không tồn tại hoặc chưa được duyệt.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp kết quả. Các field hợp lệ: `playCount`, `likeCount`, `createdAt`, `title`. Mặc định: `createdAt,desc`.
+
+### 3.7. Lấy chi tiết một Bài hát
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/songs/{id}`
+- **Mô tả:** Lấy thông tin chi tiết của một bài hát (bao gồm thông tin audio, artist, genres) để phát nhạc. Bài hát phải ở trạng thái `APPROVED` và không bị xóa.
+- **Path Variables:**
+  - `id` (UUID): ID của bài hát.
+
+### 3.8. Lấy chi tiết một Album
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/albums/{id}`
+- **Mô tả:** Lấy thông tin metadata chi tiết của một Album. Album phải ở trạng thái `APPROVED`.
+- **Path Variables:**
+  - `id` (UUID): ID của album.
+
+### 3.9. Lấy Lời bài hát
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/catalog/public/songs/{id}/lyrics`
+- **Mô tả:** Lấy lời bài hát của một bài hát. Nếu bài hát không có lời, sẽ trả về lỗi 404.
+- **Path Variables:**
+  - `id` (UUID): ID của bài hát.
+- **Response `data`:**
+  ```json
+  {
+    "id": "uuid",
+    "content": "Lời bài hát ở đây...",
+    "language": "vi"
+  }
+  ```
+
+---
+
+## 4. Dành cho Người nghe nhạc (User)
+
+_(Sắp triển khai: Các API như lưu playlist cá nhân, lịch sử nghe nhạc, thả tim bài hát,... liên quan đến Catalog sẽ được cập nhật tại đây khi hoàn thành)._
