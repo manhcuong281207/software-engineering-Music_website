@@ -1,129 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --color-spotify-black: #000000;
+  --color-spotify-base: #121212;
+  --color-spotify-card: #181818;
+  --color-spotify-hover: #282828;
+  --color-spotify-text: #ffffff;
+  --color-spotify-sub: #a7a7a7;
+  --color-primary: #fa2d48;
+  --color-primary-hover: #e0223e;
+}
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #101512;
-  color: #fff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #000000;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
 }
 
-.login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: radial-gradient(circle at top, #244b36, #101512 65%);
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.login-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 36px;
-  border: 1px solid #34483b;
-  border-radius: 20px;
-  background: #19221c;
-  box-shadow: 0 20px 60px #0005;
-}
-
-.logo {
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-  margin: 0 auto 20px;
-  border-radius: 16px;
-  background: #1ed760;
-  color: #102016;
-  font-size: 32px;
-}
-
-h1 {
-  margin: 0;
-  text-align: center;
-  font-size: 27px;
-}
-
-.subtitle {
-  margin: 12px 0 28px;
-  color: #aab7ad;
-  text-align: center;
-}
-
-label {
-  display: block;
-  margin: 18px 0 8px;
-  font-size: 14px;
-}
-
-input {
-  width: 100%;
-  padding: 13px;
-  border: 1px solid #46564a;
-  border-radius: 9px;
-  outline: none;
-  background: #101712;
-  color: white;
-}
-
-input:focus {
-  border-color: #1ed760;
-}
-
-.password-box {
-  position: relative;
-}
-
-.password-box input {
-  padding-right: 60px;
-}
-
-.show-password {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
-  border: 0;
+::-webkit-scrollbar-track {
   background: transparent;
-  color: #1ed760;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4d4d4d;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6d6d6d;
+}
+
+/* Skeleton pulse animation */
+@keyframes pulse-bg {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.skeleton {
+  animation: pulse-bg 1.5s ease-in-out infinite;
+  background-color: #282828;
+  border-radius: 4px;
+}
+
+/* Smooth transitions */
+.transition-default {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Range input styling for music player */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
   cursor: pointer;
 }
 
-.login-button {
-  width: 100%;
-  margin-top: 26px;
-  padding: 14px;
-  border: 0;
-  border-radius: 9px;
-  background: #1ed760;
-  color: #102016;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
+input[type='range']::-webkit-slider-runnable-track {
+  background: #4d4d4d;
+  height: 4px;
+  border-radius: 2px;
 }
 
-.login-button:disabled {
-  opacity: 0.6;
-  cursor: wait;
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #ffffff;
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  margin-top: -4px;
 }
 
-.message {
-  margin-top: 18px;
-  color: #1ed760;
-  overflow-wrap: anywhere;
-}
-
-.register-text {
-  margin-top: 24px;
-  color: #aab7ad;
-  text-align: center;
-  font-size: 14px;
-}
-
-a {
-  color: #1ed760;
+input[type='range']:hover::-webkit-slider-thumb {
+  background: #fa2d48;
 }
