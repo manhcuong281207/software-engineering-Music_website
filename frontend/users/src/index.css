@@ -1,1 +1,129 @@
 @import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #101512;
+  color: #fff;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at top, #244b36, #101512 65%);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 36px;
+  border: 1px solid #34483b;
+  border-radius: 20px;
+  background: #19221c;
+  box-shadow: 0 20px 60px #0005;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 20px;
+  border-radius: 16px;
+  background: #1ed760;
+  color: #102016;
+  font-size: 32px;
+}
+
+h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 27px;
+}
+
+.subtitle {
+  margin: 12px 0 28px;
+  color: #aab7ad;
+  text-align: center;
+}
+
+label {
+  display: block;
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+input {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #46564a;
+  border-radius: 9px;
+  outline: none;
+  background: #101712;
+  color: white;
+}
+
+input:focus {
+  border-color: #1ed760;
+}
+
+.password-box {
+  position: relative;
+}
+
+.password-box input {
+  padding-right: 60px;
+}
+
+.show-password {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: #1ed760;
+  cursor: pointer;
+}
+
+.login-button {
+  width: 100%;
+  margin-top: 26px;
+  padding: 14px;
+  border: 0;
+  border-radius: 9px;
+  background: #1ed760;
+  color: #102016;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.message {
+  margin-top: 18px;
+  color: #1ed760;
+  overflow-wrap: anywhere;
+}
+
+.register-text {
+  margin-top: 24px;
+  color: #aab7ad;
+  text-align: center;
+  font-size: 14px;
+}
+
+a {
+  color: #1ed760;
+}
