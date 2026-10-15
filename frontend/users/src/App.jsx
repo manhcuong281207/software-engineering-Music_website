@@ -1,45 +1,47 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { PlayerProvider } from './contexts/PlayerContext';
-import AppLayout from './components/layout/AppLayout';
-import HomePage from './pages/HomePage';
-import SearchPage from './pages/SearchPage';
-import LibraryPage from './pages/LibraryPage';
-import ProfilePage from './pages/ProfilePage';
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
 
-/**
- * App - Root component with Router + PlayerProvider
- *
- * Route structure:
- *   /          → HomePage
- *   /search    → SearchPage
- *   /library   → LibraryPage
- *   /profile   → ProfilePage
- *   *          → redirect to /
- *
- * All routes share AppLayout (Sidebar + Topbar + BottomPlayer).
- * Auth pages (login/register) are separate routes NOT under AppLayout.
- */
-export default function App() {
+import { MainLayout } from './layouts/MainLayout';
+import { HomePage } from './pages/MockHomePage';
+import { LoginPage } from './pages/LoginPage';
+import { AlbumPage } from './pages/AlbumPage';
+import { ArtistPage } from './pages/ArtistPage';
+
+// Khởi tạo React Query Client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false, // Tùy chọn để tránh refetch liên tục khi chuyển tab
+      retry: 1, // Chỉ retry 1 lần nếu API lỗi
+    },
+  },
+});
+
+function App() {
   return (
-    <BrowserRouter>
-      <PlayerProvider>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        {/* Toaster dùng để hiển thị thông báo góc trên bên phải */}
+        <Toaster theme="dark" position="top-right" richColors />
+        
         <Routes>
-          {/* === App Routes (authenticated layout) === */}
-          <Route element={<AppLayout />}>
-            <Route index element={<HomePage />} />
-            <Route path="search" element={<SearchPage />} />
-            <Route path="library" element={<LibraryPage />} />
-            <Route path="profile" element={<ProfilePage />} />
+          {/* Group 1: Các trang được bọc trong MainLayout (Có Sidebar & Player) */}
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/album/:id" element={<AlbumPage />} />
+            <Route path="/artist/:id" element={<ArtistPage />} />
+            {/* Các trang sau này như /search, /library sẽ thêm vào đây */}
           </Route>
-
-          {/* === Auth Routes (future: login / register) === */}
-          {/* <Route path="login" element={<LoginPage />} /> */}
-          {/* <Route path="register" element={<RegisterPage />} /> */}
-
-          {/* === Fallback === */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          
+          {/* Group 2: Các trang độc lập, toàn màn hình */}
+          <Route path="/login" element={<LoginPage />} />
+          {/* Route "/register" sẽ thêm vào đây */}
         </Routes>
-      </PlayerProvider>
-    </BrowserRouter>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
+
+export default App;

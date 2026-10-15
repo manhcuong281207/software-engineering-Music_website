@@ -133,6 +133,42 @@ const MOCK_NEW_RELEASES = [
     release_date: '2024-06-15',
     total_tracks: 9,
   },
+  {
+    id: 'a007',
+    title: '九 (Nine)',
+    owner_name: 'Đức Phúc',
+    album_type: 'ALBUM',
+    cover_image: 'https://picsum.photos/seed/album7/300/300',
+    release_date: '2024-07-20',
+    total_tracks: 8,
+  },
+  {
+    id: 'a008',
+    title: 'Đen (Deluxe Edition)',
+    owner_name: 'Đen Vâu',
+    album_type: 'ALBUM',
+    cover_image: 'https://picsum.photos/seed/album8/300/300',
+    release_date: '2024-08-12',
+    total_tracks: 10,
+  },
+  {
+    id: 'a009',
+    title: 'Ai Cũng Phải Bắt Đầu Từ Đâu Đó',
+    owner_name: 'HIEUTHUHAI',
+    album_type: 'ALBUM',
+    cover_image: 'https://picsum.photos/seed/album9/300/300',
+    release_date: '2024-09-05',
+    total_tracks: 12,
+  },
+  {
+    id: 'a010',
+    title: 'Tâm Trạng Tan Hơi Chậm Một Chút',
+    owner_name: 'Bích Phương',
+    album_type: 'EP',
+    cover_image: 'https://picsum.photos/seed/album10/300/300',
+    release_date: '2024-10-01',
+    total_tracks: 6,
+  },
 ];
 
 const MOCK_ARTISTS = [
@@ -177,6 +213,34 @@ const MOCK_ARTISTS = [
     avatar_url: 'https://picsum.photos/seed/artist6/300/300',
     follower_count: 980000,
     biography: 'Nghệ sĩ đa tài với âm nhạc đẹp và cảm xúc.',
+  },
+  {
+    id: 'ar007',
+    stage_name: 'Đức Phúc',
+    avatar_url: 'https://picsum.photos/seed/artist7/300/300',
+    follower_count: 920000,
+    biography: 'Ca sĩ sở hữu giọng hát giàu cảm xúc.',
+  },
+  {
+    id: 'ar008',
+    stage_name: 'Đen Vâu',
+    avatar_url: 'https://picsum.photos/seed/artist8/300/300',
+    follower_count: 870000,
+    biography: 'Rapper với những ca khúc kể chuyện gần gũi.',
+  },
+  {
+    id: 'ar009',
+    stage_name: 'HIEUTHUHAI',
+    avatar_url: 'https://picsum.photos/seed/artist9/300/300',
+    follower_count: 810000,
+    biography: 'Rapper trẻ với phong cách hiện đại.',
+  },
+  {
+    id: 'ar010',
+    stage_name: 'Bích Phương',
+    avatar_url: 'https://picsum.photos/seed/artist10/300/300',
+    follower_count: 760000,
+    biography: 'Ca sĩ nhạc pop với màu sắc riêng.',
   },
 ];
 
@@ -240,6 +304,26 @@ const MOCK_TRENDING = [
     play_count: 9800000,
     like_count: 355000,
     audio_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3',
+  },
+  {
+    id: 's013',
+    title: 'Không Thể Cùng Nhau Suốt Kiếp',
+    owner_name: 'HIEUTHUHAI',
+    cover_image: 'https://picsum.photos/seed/song13/300/300',
+    duration_seconds: 221,
+    play_count: 7200000,
+    like_count: 260000,
+    audio_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3',
+  },
+  {
+    id: 's014',
+    title: 'Bùa Yêu',
+    owner_name: 'Bích Phương',
+    cover_image: 'https://picsum.photos/seed/song14/300/300',
+    duration_seconds: 236,
+    play_count: 6900000,
+    like_count: 240000,
+    audio_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3',
   },
 ];
 
@@ -309,4 +393,96 @@ export const mockApi = {
     );
     return { data: results };
   },
+
+  // Các hàm dưới đây mô phỏng response phân trang mà frontend2 nhận từ backend.
+  // Toàn bộ trang mới chỉ gọi những hàm mock này, không gửi request mạng.
+  getPublicSongs: async ({ size = 10, sort } = {}) => {
+    await delay(350);
+    const songs = [...MOCK_FEATURED_SONGS, ...MOCK_TRENDING].sort((a, b) =>
+      sort?.startsWith('playCount') ? b.play_count - a.play_count : b.like_count - a.like_count,
+    );
+    return { data: { content: songs.slice(0, size).map(toPublicSong) } };
+  },
+
+  getPublicAlbums: async ({ size = 10 } = {}) => {
+    await delay(420);
+    return { data: { content: MOCK_NEW_RELEASES.slice(0, size).map(toPublicAlbum) } };
+  },
+
+  getPublicArtists: async ({ size = 10 } = {}) => {
+    await delay(380);
+    return { data: { content: MOCK_ARTISTS.slice(0, size).map(toPublicArtist) } };
+  },
+
+  getArtistDetail: async (artistId) => {
+    await delay(250);
+    const artist = MOCK_ARTISTS.find((item) => item.id === artistId);
+    return { data: artist ? toPublicArtist(artist) : null };
+  },
+
+  getArtistSongs: async (artistId, { size = 50 } = {}) => {
+    await delay(300);
+    const artist = MOCK_ARTISTS.find((item) => item.id === artistId);
+    const songs = [...MOCK_FEATURED_SONGS, ...MOCK_TRENDING]
+      .filter((song) => artist && song.owner_name === artist.stage_name)
+      .sort((a, b) => b.like_count - a.like_count)
+      .slice(0, size);
+    return { data: { content: songs.map(toPublicSong) } };
+  },
+
+  getArtistAlbums: async (artistId, { size = 20 } = {}) => {
+    await delay(320);
+    const artist = MOCK_ARTISTS.find((item) => item.id === artistId);
+    const albums = MOCK_NEW_RELEASES.filter((album) => artist && album.owner_name === artist.stage_name);
+    return { data: { content: albums.slice(0, size).map(toPublicAlbum) } };
+  },
+
+  getAlbumSongs: async (albumId, { size = 50 } = {}) => {
+    await delay(300);
+    const album = MOCK_NEW_RELEASES.find((item) => item.id === albumId);
+    const songs = [...MOCK_FEATURED_SONGS, ...MOCK_TRENDING].filter(
+      (song) => album && song.owner_name === album.owner_name,
+    );
+    return { data: { content: songs.slice(0, size).map(toPublicSong) } };
+  },
+
+  login: async ({ email }) => {
+    await delay(500);
+    return {
+      data: {
+        user: { ...MOCK_USER, email, fullName: MOCK_USER.full_name, avatarUrl: MOCK_USER.avatar_url },
+        accessToken: 'mock-access-token',
+      },
+    };
+  },
 };
+
+function toPublicSong(song) {
+  return {
+    ...song,
+    ownerName: song.owner_name,
+    artistName: song.owner_name,
+    coverImage: song.cover_image,
+    audioUrl: song.audio_url,
+    durationMs: song.duration_seconds * 1000,
+  };
+}
+
+function toPublicAlbum(album) {
+  return {
+    ...album,
+    ownerName: album.owner_name,
+    coverImage: album.cover_image,
+    albumType: album.album_type,
+  };
+}
+
+function toPublicArtist(artist) {
+  return {
+    ...artist,
+    stageName: artist.stage_name,
+    avatarUrl: artist.avatar_url,
+    coverUrl: artist.avatar_url,
+    followerCount: artist.follower_count,
+  };
+}
