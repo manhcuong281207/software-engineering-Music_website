@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { MainLayout } from './layouts/MainLayout';
 import { HomePage } from './pages/MockHomePage';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { AlbumPage } from './pages/AlbumPage';
 import { ArtistPage } from './pages/ArtistPage';
 
@@ -13,8 +14,8 @@ import { ArtistPage } from './pages/ArtistPage';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false, // Tùy chọn để tránh refetch liên tục khi chuyển tab
-      retry: 1, // Chỉ retry 1 lần nếu API lỗi
+      refetchOnWindowFocus: false,
+      retry: 1,
     },
   },
 });
@@ -25,7 +26,7 @@ function App() {
       <BrowserRouter>
         {/* Toaster dùng để hiển thị thông báo góc trên bên phải */}
         <Toaster theme="dark" position="top-right" richColors />
-        
+
         <Routes>
           {/* Group 1: Các trang được bọc trong MainLayout (Có Sidebar & Player) */}
           <Route element={<MainLayout />}>
@@ -34,10 +35,10 @@ function App() {
             <Route path="/artist/:id" element={<ArtistPage />} />
             {/* Các trang sau này như /search, /library sẽ thêm vào đây */}
           </Route>
-          
+
           {/* Group 2: Các trang độc lập, toàn màn hình */}
           <Route path="/login" element={<LoginPage />} />
-          {/* Route "/register" sẽ thêm vào đây */}
+          <Route path="/register" element={<RegisterPage />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

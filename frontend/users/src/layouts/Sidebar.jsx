@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router";
 import {
   Search,
   Library,
@@ -20,6 +21,7 @@ const filters = ["Playlist", "Album", "Nghệ sĩ"];
 const mockLibrary = [];
 
 export const Sidebar = () => {
+  const navigate = useNavigate();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [width, setWidth] = useState(320); // Mặc định w-80 = 320px để rộng rãi hiển thị list
   const [isResizing, setIsResizing] = useState(false);
@@ -27,7 +29,7 @@ export const Sidebar = () => {
 
   const handleProtectedAction = (actionName) => {
     if (!isAuthenticated) {
-      showLoginToast(actionName);
+      showLoginToast(actionName, () => navigate('/login'));
       return false;
     }
     return true;
