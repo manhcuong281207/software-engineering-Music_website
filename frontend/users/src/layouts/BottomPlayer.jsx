@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import {
   Play,
   Pause,
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 import { showLoginToast } from "../utils/toastUtils";
 
 export const BottomPlayer = () => {
+  const navigate = useNavigate();
   const { currentSong, isPlaying, setIsPlaying, playNext, playPrevious } =
     usePlayerStore();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -93,11 +95,11 @@ export const BottomPlayer = () => {
 
   const handleLike = () => {
     if (!isAuthenticated) {
-      showLoginToast("thêm bài hát vào danh sách yêu thích");
+      showLoginToast('thêm bài hát vào danh sách yêu thích', () => navigate('/login'));
       return;
     }
     // TODO: Gọi API thêm bài hát vào yêu thích
-    toast.success("Đã thêm vào bài hát yêu thích!");
+    toast.success('Đã thêm vào bài hát yêu thích!');
   };
 
   if (!currentSong) return null;

@@ -6,22 +6,33 @@ export const useAuthStore = create(
     (set) => ({
       user: null,
       accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
 
-      login: (user, token) => set({ 
-        user: user, 
-        accessToken: token,
-        isAuthenticated: true 
+      // Đăng nhập: lưu user info + cả 2 token
+      login: (user, accessToken, refreshToken) => set({
+        user,
+        accessToken,
+        refreshToken,
+        isAuthenticated: true,
       }),
-      
-      logout: () => set({ 
-        user: null, 
+
+      // Cập nhật thông tin user sau khi edit profile
+      setUser: (user) => set({ user }),
+
+      // Cập nhật cặp token mới sau khi refresh
+      setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
+
+      // Đăng xuất: clear tất cả
+      logout: () => set({
+        user: null,
         accessToken: null,
-        isAuthenticated: false 
+        refreshToken: null,
+        isAuthenticated: false,
       }),
     }),
     {
-      name: 'mc-music-auth', // Tên key lưu trong localStorage
+      name: 'mc-music-auth', // Key lưu trong localStorage
     }
   )
 );
