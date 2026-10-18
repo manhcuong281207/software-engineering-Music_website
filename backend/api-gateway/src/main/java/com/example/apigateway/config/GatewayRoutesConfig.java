@@ -23,6 +23,9 @@ public class GatewayRoutesConfig {
     @Value("${service.uri.admin:http://localhost:8084}")
     private String adminServiceUri;
 
+    @Value("${service.uri.catalog:http://localhost:8081}")
+    private String catalogServiceUri;
+
     @Bean
     public RouterFunction<ServerResponse> customRoutes() {
         return route("users-service")
@@ -36,6 +39,10 @@ public class GatewayRoutesConfig {
             .and(route("admin-service")
                 .route(path("/api/admin/**"), http())
                 .before(uri(adminServiceUri))
+                .build())
+            .and(route("catalog-service")
+                .route(path("/api/catalog/**"), http())
+                .before(uri(catalogServiceUri))
                 .build());
     }
 }
