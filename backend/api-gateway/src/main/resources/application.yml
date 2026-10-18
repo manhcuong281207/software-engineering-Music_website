@@ -9,6 +9,7 @@ service:
         users: http://localhost:8082
         artists: http://localhost:8083
         admin: http://localhost:8084
+        catalog: http://localhost:8081
 
 ---
 spring:
@@ -21,3 +22,4 @@ service:
         users: http://users-service:8082
         artists: http://artists-service:8083
         admin: http://admin-service:8084
+        catalog: http://catalog-service:8081
