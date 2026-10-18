@@ -12,6 +12,6 @@ public class FeignConfig {
 
     @Bean
     public RequestInterceptor internalApiRequestInterceptor() {
-        return template -> template.header("X-Internal-Secret", internalApiSecret);
+        return requestTemplate -> requestTemplate.header("X-Internal-Secret", internalApiSecret);
     }
 }

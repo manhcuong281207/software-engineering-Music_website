@@ -1,0 +1,108 @@
+package com.example.usersservice.service;
+
+import com.example.usersservice.client.CatalogServiceClient;
+import com.example.usersservice.client.SongInternalResponse;
+import com.example.usersservice.exception.ApiException;
+import com.example.usersservice.model.dto.request.PlaylistCreateRequest;
+import com.example.usersservice.model.dto.request.PlaylistSongAddRequest;
+import com.example.usersservice.model.dto.response.PlaylistResponse;
+import com.example.usersservice.model.dto.response.PlaylistSongResponse;
+import com.example.usersservice.model.entity.Playlist;
+import com.example.usersservice.model.entity.PlaylistSong;
+import com.example.usersservice.model.entity.PlaylistSongId;
+import com.example.usersservice.repository.PlaylistRepository;
+import com.example.usersservice.repository.PlaylistSongRepository;
+import feign.FeignException;
+import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Service
+public class PlaylistService {
+    private final PlaylistRepository playlistRepository;
+    private final PlaylistSongRepository playlistSongRepository;
+    private final CatalogServiceClient catalogServiceClient;
+    private final ModelMapper modelMapper;
+
+    public PlaylistService(PlaylistRepository playlistRepository, PlaylistSongRepository playlistSongRepository,
+                           CatalogServiceClient catalogServiceClient, ModelMapper modelMapper) {
+        this.playlistRepository = playlistRepository;
+        this.playlistSongRepository = playlistSongRepository;
+        this.catalogServiceClient = catalogServiceClient;
+        this.modelMapper = modelMapper;
+    }
+
+    @Transactional
+    public PlaylistResponse createPlaylist(PlaylistCreateRequest request, UUID userId) {
+        Playlist playlist = modelMapper.map(request, Playlist.class);
+        playlist.setUserId(userId);
+        if (playlist.getIsPublic() == null) playlist.setIsPublic(false);
+        playlist.setCreatedAt(LocalDateTime.now());
+        return modelMapper.map(playlistRepository.save(playlist), PlaylistResponse.class);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PlaylistResponse> getUserPlaylists(UUID userId, Pageable pageable) {
+        return playlistRepository.findByUserId(userId, pageable).map(playlist -> modelMapper.map(playlist, PlaylistResponse.class));
+    }
+
+    @Transactional
+    public PlaylistSongResponse addSongToPlaylist(UUID playlistId, PlaylistSongAddRequest request, UUID userId) {
+        Playlist playlist = getPlaylist(playlistId);
+        requireOwner(playlist, userId);
+        PlaylistSongId id = new PlaylistSongId(playlistId, request.getSongId());
+        if (playlistSongRepository.existsById(id)) throw new ApiException(HttpStatus.CONFLICT, "Bài hát đã có trong playlist");
+
+        SongInternalResponse song;
+        try {
+            song = catalogServiceClient.getSongDetails(request.getSongId());
+        } catch (FeignException.NotFound exception) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy bài hát trên hệ thống");
+        } catch (FeignException exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi khi gọi Catalog Service: " + exception.getMessage());
+        }
+
+        PlaylistSong playlistSong = PlaylistSong.builder()
+                .playlistId(playlistId)
+                .songId(request.getSongId())
+                .songTitle(song.getTitle())
+                .artistName(song.getOwnerName())
+                .coverImage(song.getCoverImage())
+                .addedAt(LocalDateTime.now())
+                .build();
+        return modelMapper.map(playlistSongRepository.save(playlistSong), PlaylistSongResponse.class);
+    }
+
+    @Transactional
+    public void removeSongFromPlaylist(UUID playlistId, UUID songId, UUID userId) {
+        Playlist playlist = getPlaylist(playlistId);
+        requireOwner(playlist, userId);
+        PlaylistSongId id = new PlaylistSongId(playlistId, songId);
+        if (!playlistSongRepository.existsById(id)) throw new ApiException(HttpStatus.NOT_FOUND, "Bài hát không tồn tại trong playlist");
+        playlistSongRepository.deleteById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PlaylistSongResponse> getPlaylistSongs(UUID playlistId, UUID userId, Pageable pageable) {
+        Playlist playlist = getPlaylist(playlistId);
+        if (!Boolean.TRUE.equals(playlist.getIsPublic()) && !playlist.getUserId().equals(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem playlist này");
+        }
+        return playlistSongRepository.findByPlaylistIdOrderByAddedAtDesc(playlistId, pageable)
+                .map(song -> modelMapper.map(song, PlaylistSongResponse.class));
+    }
+
+    private Playlist getPlaylist(UUID id) {
+        return playlistRepository.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy playlist"));
+    }
+
+    private void requireOwner(Playlist playlist, UUID userId) {
+        if (!playlist.getUserId().equals(userId)) throw new ApiException(HttpStatus.FORBIDDEN, "Bạn không có quyền chỉnh sửa playlist này");
+    }
+}
