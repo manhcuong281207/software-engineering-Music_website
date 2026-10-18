@@ -1,0 +1,50 @@
+package com.example.catalogservice.repository;
+
+import com.example.catalogservice.model.entity.Song;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface SongRepository extends JpaRepository<Song, UUID> {
+    Page<Song> findByOwnerId(UUID ownerId, Pageable pageable);
+    Page<Song> findByOwnerIdAndStatusAndIsDeletedFalse(UUID ownerId, String status, Pageable pageable);
+    Page<Song> findByAlbumIdAndStatusAndIsDeletedFalse(UUID albumId, String status, Pageable pageable);
+    List<Song> findByStatusAndIsDeletedFalse(String status);
+    List<Song> findByStatus(String status);
+    Page<Song> findByStatus(String status, Pageable pageable);
+    int countByAlbumId(UUID albumId);
+    List<Song> findByAlbumId(UUID albumId);
+    long countByAlbumIdAndStatus(UUID albumId, String status);
+
+    @Query("SELECT DISTINCT s FROM Song s LEFT JOIN s.genres g " +
+           "WHERE s.status = 'APPROVED' AND s.isDeleted = false " +
+           "AND (:keyword IS NULL OR LOWER(s.title) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
+           "AND (:genreId IS NULL OR g.id = :genreId)")
+    Page<Song> findPublicSongs(@Param("keyword") String keyword, @Param("genreId") UUID genreId, Pageable pageable);
+
+    @Query("SELECT COUNT(s) as totalSongs, COALESCE(SUM(s.playCount), 0) as totalPlays, COALESCE(SUM(s.likeCount), 0) as totalLikes FROM Song s WHERE s.ownerId = :artistId AND s.isDeleted = false")
+    com.example.catalogservice.repository.projection.ArtistStatsProjection getArtistStats(@Param("artistId") UUID artistId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Song s SET s.playCount = s.playCount + 1 WHERE s.id = :id")
+    void incrementPlayCount(@Param("id") UUID id);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Song s SET s.likeCount = s.likeCount + 1 WHERE s.id = :id")
+    void incrementLikeCount(@Param("id") UUID id);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Song s SET s.likeCount = s.likeCount - 1 WHERE s.id = :id AND s.likeCount > 0")
+    void decrementLikeCount(@Param("id") UUID id);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Song s SET s.ownerName = :newName WHERE s.ownerId = :artistId")
+    void updateOwnerName(@Param("artistId") UUID artistId, @Param("newName") String newName);
+}
