@@ -49,17 +49,11 @@ services:
       - DB_URL=jdbc:postgresql://postgres-db:5432/${DB_NAME}?currentSchema=mc_music_users_schema
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
-      - KAFKA_SERVERS=kafka:29092
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-SuperSecretKeyForInternalMicroserviceCommunication_McMusic2026}
-      - CATALOG_SERVICE_URL=http://catalog-service:8081
-      - ARTIST_SERVICE_URL=http://artists-service:8083
     ports:
       - "8082:8082"
     depends_on:
       postgres-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
     networks:
       - mc_music_network
 
@@ -71,16 +65,11 @@ services:
       - DB_URL=jdbc:postgresql://postgres-db:5432/${DB_NAME}?currentSchema=mc_music_artists_schema
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
-      - KAFKA_SERVERS=kafka:29092
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-SuperSecretKeyForInternalMicroserviceCommunication_McMusic2026}
-      - CATALOG_SERVICE_URL=http://catalog-service:8081
     ports:
       - "8083:8083"
     depends_on:
       postgres-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
     networks:
       - mc_music_network
 
@@ -92,18 +81,11 @@ services:
       - DB_URL=jdbc:postgresql://postgres-db:5432/${DB_NAME}?currentSchema=mc_music_admin_schema
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-SuperSecretKeyForInternalMicroserviceCommunication_McMusic2026}
-      - USERS_SERVICE_URL=http://users-service:8082
-      - ARTISTS_SERVICE_URL=http://artists-service:8083
     ports:
       - "8084:8084"
     depends_on:
       postgres-db:
         condition: service_healthy
-      users-service:
-        condition: service_started
-      artists-service:
-        condition: service_started
     networks:
       - mc_music_network
 
@@ -115,24 +97,11 @@ services:
       - DB_URL=jdbc:postgresql://postgres-db:5432/${DB_NAME}?currentSchema=mc_music_catalog_schema
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
-      - KAFKA_SERVERS=kafka:29092
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-SuperSecretKeyForInternalMicroserviceCommunication_McMusic2026}
-      - ARTISTS_SERVICE_URL=http://artists-service:8083
-      - JWT_SECRET_USER=${JWT_SECRET_USER:-superSecretKeyForMcMusicAppThatIsAtLeast32CharactersLong}
-      - JWT_SECRET_ARTIST=${JWT_SECRET_ARTIST:-superSecretKeyForArtistsServiceThatIsAtLeast32CharsLong}
-      - JWT_SECRET_ADMIN=${JWT_SECRET_ADMIN:-superSecretKeyForAdminServiceThatIsAtLeast32CharsLong}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-nemhjypf}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-198795169447897}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-oiV5gNYyZg2XDOy6q066x6MQ9YI}
     ports:
       - "8081:8081"
     depends_on:
       postgres-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
-      artists-service:
-        condition: service_started
     networks:
       - mc_music_network
 
