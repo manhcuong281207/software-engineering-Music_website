@@ -1,0 +1,145 @@
+# Hướng dẫn Kiểm thử và Sử dụng API - Admin Service
+
+Tài liệu này tổng hợp toàn bộ các API thuộc **Admin Service**.
+**LƯU Ý QUAN TRỌNG:** Tất cả các endpoint dưới đây đều phải được gọi thông qua **API Gateway (Port 8686)**. Không gọi trực tiếp vào port của Admin Service.
+
+Base URL cho Admin Service thông qua Gateway là: `http://localhost:8686/api/admin`
+
+---
+
+## 1. Authentication (Xác thực)
+
+Nhóm API này dùng để đăng nhập và quản lý phiên làm việc của Quản trị viên (Admin).
+_Lưu ý: Không có tính năng Đăng ký (Register) cho Admin. Tài khoản được cấp sẵn trong Database._
+
+**Tài khoản mặc định:**
+
+- **Email:** `admin@mcmusic.com`
+- **Password:** `[PASSWORD]`
+
+### 1.1. Đăng nhập (Login)
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/admin/auth/login`
+- **Mô tả:** Đăng nhập vào hệ thống dành riêng cho Admin.
+- **Body (JSON):**
+  ```json
+  {
+    "email": "admin@mcmusic.com",
+    "password": "[PASSWORD]"
+  }
+  ```
+- **Response thành công (200 OK):**
+  Trả về `accessToken` và `refreshToken` (token sẽ chứa quyền `SUPER_ADMIN`).
+
+### 1.2. Làm mới Token (Refresh Token)
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/admin/auth/refresh`
+- **Mô tả:** Cấp lại Access Token và Refresh Token mới.
+- **Body (JSON):**
+  ```json
+  {
+    "refreshToken": "<CHUỖI_REFRESH_TOKEN_CỦA_ADMIN>"
+  }
+  ```
+- **Response thành công (200 OK):**
+  Trả về cặp token hoàn toàn mới. Refresh Token cũ bị vô hiệu.
+
+### 1.3. Đăng xuất (Logout)
+
+- **Method:** `POST`
+- **Endpoint:** `http://localhost:8686/api/admin/auth/logout`
+- **Mô tả:** Đăng xuất admin, vô hiệu hóa (xóa) Refresh Token.
+- **Body (JSON):**
+  ```json
+  {
+    "refreshToken": "<CHUỖI_REFRESH_TOKEN_CỦA_ADMIN>"
+  }
+  ```
+- **Response thành công (200 OK):**
+  Xóa Refresh Token thành công.
+
+---
+
+## 2. Quản lý Người dùng (Users)
+
+**Yêu cầu:** Gửi kèm Header `Authorization: Bearer <ACCESS_TOKEN_CỦA_ADMIN>`.
+
+### 2.1. Lấy danh sách Người dùng
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/admin/users`
+- **Mô tả:** Lấy danh sách tất cả người dùng trong hệ thống có phân trang.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp (VD: `createdAt,desc`).
+
+### 2.2. Lấy thông tin chi tiết một Người dùng
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/admin/users/{id}`
+- **Mô tả:** Lấy thông tin chi tiết của một người dùng dựa vào ID, bao gồm trạng thái hoạt động (isActive) để phục vụ việc khóa/mở khóa.
+
+### 2.3. Khóa / Mở khóa tài khoản Người dùng
+
+- **Method:** `PATCH`
+- **Endpoint:** `http://localhost:8686/api/admin/users/{id}/status`
+- **Mô tả:** Cập nhật trạng thái hoạt động (`isActive`) của một người dùng. Hệ thống sẽ tự động gọi Internal API sang User Service để cập nhật.
+- **Body (JSON):**
+  ```json
+  { "isActive": false }
+  ```
+  _(Giá trị `false` để khóa tài khoản, `true` để mở khóa)_
+- **Response thành công (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Khóa tài khoản thành công",
+    "data": null
+  }
+  ```
+
+---
+
+## 3. Quản lý Nghệ sĩ (Artists)
+
+**Yêu cầu:** Gửi kèm Header `Authorization: Bearer <ACCESS_TOKEN_CỦA_ADMIN>`.
+
+### 3.1. Lấy danh sách Nghệ sĩ
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/admin/artists`
+- **Mô tả:** Lấy danh sách tất cả nghệ sĩ trong hệ thống (bao gồm cả nghệ sĩ đã bị khóa) có phân trang.
+- **Query Parameters:**
+  - `page` (Int, Optional): Số trang (Mặc định: 0).
+  - `size` (Int, Optional): Số lượng hiển thị mỗi trang (Mặc định: 10).
+  - `sort` (String, Optional): Sắp xếp (VD: `createdAt,desc`).
+
+### 3.2. Lấy thông tin chi tiết một Nghệ sĩ
+
+- **Method:** `GET`
+- **Endpoint:** `http://localhost:8686/api/admin/artists/{id}`
+- **Mô tả:** Lấy thông tin chi tiết của một nghệ sĩ dựa vào ID, bao gồm trạng thái hoạt động (isActive) để phục vụ việc khóa/mở khóa.
+
+### 3.3. Khóa / Mở khóa tài khoản Nghệ sĩ
+
+- **Method:** `PATCH`
+- **Endpoint:** `http://localhost:8686/api/admin/artists/{id}/status`
+- **Mô tả:** Cập nhật trạng thái hoạt động (`isActive`) của một nghệ sĩ. Hệ thống sẽ tự động gọi Internal API sang Artist Service để cập nhật.
+- **Body (JSON):**
+  ```json
+  { "isActive": false }
+  ```
+  _(Giá trị `false` để khóa tài khoản, `true` để mở khóa)_
+- **Response thành công (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Khóa tài khoản nghệ sĩ thành công",
+    "data": null
+  }
+  ```

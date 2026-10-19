@@ -1,0 +1,108 @@
+package com.example.adminservice.advice;
+
+import com.example.adminservice.exception.ApiException;
+import com.example.adminservice.model.dto.response.ApiResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalHandleException {
+
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ApiResponse<Void>> handleApiException(ApiException ex) {
+        return ResponseEntity
+                .status(ex.getStatus())
+                .body(ApiResponse.error(ex.getStatus().value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach((error) -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            errors.put(fieldName, errorMessage);
+        });
+        
+        ApiResponse<Map<String, String>> response = ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "Dữ liệu đầu vào không hợp lệ");
+        response.setData(errors);
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(HttpMessageNotReadableException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "Dữ liệu JSON gửi lên không hợp lệ hoặc sai định dạng"));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Truy cập bị từ chối: Token không hợp lệ hoặc đã hết hạn"));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(HttpStatus.FORBIDDEN.value(), "Truy cập bị từ chối: Bạn không có quyền thực hiện hành động này"));
+    }
+
+    @ExceptionHandler(feign.FeignException.class)
+    public ResponseEntity<ApiResponse<Void>> handleFeignException(feign.FeignException ex) {
+        int status = ex.status();
+        if (status <= 0) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR.value();
+        }
+
+        String message = "Lỗi khi gọi service nội bộ";
+        if (status == 404) {
+            message = "Không tìm thấy dữ liệu yêu cầu";
+        } else if (status == 400) {
+            message = "Yêu cầu không hợp lệ";
+        }
+
+        // Parse thông báo lỗi gốc từ response body của service nội bộ
+        try {
+            String responseBody = ex.contentUTF8();
+            if (responseBody != null && !responseBody.isBlank()) {
+                // Sử dụng string manipulation cơ bản để tránh phụ thuộc vào thư viện bên ngoài
+                String searchKey = "\"message\":\"";
+                int startIndex = responseBody.indexOf(searchKey);
+                if (startIndex != -1) {
+                    int messageStart = startIndex + searchKey.length();
+                    int messageEnd = responseBody.indexOf("\"", messageStart);
+                    if (messageEnd != -1) {
+                        message = responseBody.substring(messageStart, messageEnd);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Fallback to default message
+        }
+
+        return ResponseEntity
+                .status(status)
+                .body(ApiResponse.error(status, message));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Đã xảy ra lỗi hệ thống: " + ex.getMessage()));
+    }
+}

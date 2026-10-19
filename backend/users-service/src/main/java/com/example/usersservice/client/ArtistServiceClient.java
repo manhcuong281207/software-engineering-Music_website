@@ -1,0 +1,21 @@
+package com.example.usersservice.client;
+
+import com.example.usersservice.config.FeignConfig;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+
+import java.util.UUID;
+
+@FeignClient(name = "artists-service", url = "${artist.service.url}", configuration = FeignConfig.class)
+public interface ArtistServiceClient {
+    @GetMapping("/api/internal/artists/{id}")
+    ArtistInternalResponse getArtistDetails(@PathVariable("id") UUID id);
+
+    @PutMapping("/api/internal/artists/{artistId}/increment-follower")
+    void incrementFollowerCount(@PathVariable("artistId") UUID artistId);
+
+    @PutMapping("/api/internal/artists/{artistId}/decrement-follower")
+    void decrementFollowerCount(@PathVariable("artistId") UUID artistId);
+}
