@@ -7,5 +7,6 @@ import lombok.Data;
 public class LyricsUpdateRequest {
     @NotBlank(message = "Nội dung lời bài hát không được để trống")
     private String content;
+    
     private String language;
 }

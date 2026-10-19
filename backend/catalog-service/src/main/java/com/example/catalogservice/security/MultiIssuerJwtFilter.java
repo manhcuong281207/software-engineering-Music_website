@@ -8,7 +8,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,74 +16,86 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Set;
+import java.util.Collections;
 
 @Component
 public class MultiIssuerJwtFilter extends OncePerRequestFilter {
-    private final JwtTokenProvider userProvider;
-    private final JwtTokenProvider artistProvider;
-    private final JwtTokenProvider adminProvider;
-    private final ObjectMapper mapper = new ObjectMapper();
 
-    public MultiIssuerJwtFilter(@Qualifier("userJwtTokenProvider") JwtTokenProvider userProvider,
-                                @Qualifier("artistJwtTokenProvider") JwtTokenProvider artistProvider,
-                                @Qualifier("adminJwtTokenProvider") JwtTokenProvider adminProvider) {
-        this.userProvider = userProvider;
-        this.artistProvider = artistProvider;
-        this.adminProvider = adminProvider;
+    private final JwtTokenProvider userJwtTokenProvider;
+    private final JwtTokenProvider artistJwtTokenProvider;
+    private final JwtTokenProvider adminJwtTokenProvider;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public MultiIssuerJwtFilter(JwtTokenProvider userJwtTokenProvider,
+                                JwtTokenProvider artistJwtTokenProvider,
+                                JwtTokenProvider adminJwtTokenProvider) {
+        this.userJwtTokenProvider = userJwtTokenProvider;
+        this.artistJwtTokenProvider = artistJwtTokenProvider;
+        this.adminJwtTokenProvider = adminJwtTokenProvider;
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String token = bearerToken(request);
-        if (token != null) {
+        
+        String token = getJwtFromRequest(request);
+        if (StringUtils.hasText(token)) {
             try {
-                String issuer = readIssuer(token);
-                JwtTokenProvider provider = switch (issuer == null ? "" : issuer) {
-                    case "user-service" -> userProvider;
-                    case "artist-service" -> artistProvider;
-                    case "admin-service" -> adminProvider;
-                    default -> null;
-                };
+                String issuer = extractIssuerWithoutVerification(token);
+                JwtTokenProvider provider = getProviderByIssuer(issuer);
+                
                 if (provider != null && provider.validateToken(token)) {
                     Claims claims = provider.getClaimsFromToken(token);
                     String role = claims.get("role", String.class);
-                    if (role == null) role = switch (issuer) {
-                        case "user-service" -> "USER";
-                        case "artist-service" -> "ARTIST";
-                        default -> "ADMIN";
-                    };
-                    role = role.replaceFirst("^ROLE_", "").toUpperCase();
-                    Set<String> issuerRoles = switch (issuer) {
-                        case "user-service" -> Set.of("USER");
-                        case "artist-service" -> Set.of("ARTIST");
-                        default -> Set.of("ADMIN", "SUPER_ADMIN");
-                    };
-                    if (issuerRoles.contains(role) && claims.getSubject() != null) {
-                        var authentication = new UsernamePasswordAuthenticationToken(claims.getSubject(), null,
-                                Set.of(new SimpleGrantedAuthority("ROLE_" + role)));
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    
+                    if (role == null) {
+                        // Fallback based on issuer if role isn't explicitly in claims
+                        if ("user-service".equals(issuer)) role = "USER";
+                        else if ("artist-service".equals(issuer)) role = "ARTIST";
+                        else if ("admin-service".equals(issuer)) role = "ADMIN";
                     }
+
+                    // Prepend ROLE_ for Spring Security
+                    String springRole = role.startsWith("ROLE_") ? role : "ROLE_" + role;
+                    
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                            claims.getSubject(), null, Collections.singletonList(new SimpleGrantedAuthority(springRole))
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
-            } catch (RuntimeException | IOException ignored) {
-                SecurityContextHolder.clearContext();
+            } catch (Exception ex) {
+                logger.error("Could not set user authentication in security context", ex);
             }
         }
-        chain.doFilter(request, response);
+        
+        filterChain.doFilter(request, response);
     }
 
-    private String bearerToken(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        return StringUtils.hasText(header) && header.startsWith("Bearer ") ? header.substring(7) : null;
+    private String getJwtFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 
-    private String readIssuer(String token) throws IOException {
+    private String extractIssuerWithoutVerification(String token) throws IOException {
         String[] parts = token.split("\\.");
-        if (parts.length != 3) return null;
-        JsonNode payload = mapper.readTree(Base64.getUrlDecoder().decode(parts[1]));
-        return payload.hasNonNull("iss") ? payload.get("iss").asText() : null;
+        if (parts.length < 2) return null;
+        
+        String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+        JsonNode jsonNode = objectMapper.readTree(payload);
+        if (jsonNode.has("iss")) {
+            return jsonNode.get("iss").asText();
+        }
+        return null;
+    }
+    
+    private JwtTokenProvider getProviderByIssuer(String issuer) {
+        if ("user-service".equals(issuer)) return userJwtTokenProvider;
+        if ("artist-service".equals(issuer)) return artistJwtTokenProvider;
+        if ("admin-service".equals(issuer)) return adminJwtTokenProvider;
+        return null;
     }
 }

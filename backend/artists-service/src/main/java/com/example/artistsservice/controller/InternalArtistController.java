@@ -1,16 +1,18 @@
 package com.example.artistsservice.controller;
 
 import com.example.artistsservice.exception.ApiException;
+import org.springframework.http.HttpStatus;
+import com.example.artistsservice.model.dto.response.ArtistInternalResponse;
 import com.example.artistsservice.model.entity.Artist;
 import com.example.artistsservice.repository.ArtistRepository;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import com.example.artistsservice.model.dto.response.ArtistAdminInternalResponse;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.Set;
@@ -20,7 +22,8 @@ import java.util.UUID;
 @RequestMapping("/api/internal/artists")
 public class InternalArtistController {
 
-    private static final Set<String> SORT_FIELDS = Set.of("stageName", "createdAt", "followerCount");
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("stageName", "createdAt", "followerCount");
+
     private final ArtistRepository artistRepository;
 
     public InternalArtistController(ArtistRepository artistRepository) {
@@ -28,35 +31,79 @@ public class InternalArtistController {
     }
 
     @GetMapping("/{artistId}")
-    public ResponseEntity<Map<String, Object>> getArtistById(@PathVariable UUID artistId) {
-        Artist artist = findArtist(artistId);
-        return ResponseEntity.ok(Map.of("id", artist.getId(), "stageName", artist.getStageName(),
-            "avatarUrl", artist.getAvatarUrl() == null ? "" : artist.getAvatarUrl(),
-            "isActive", Boolean.TRUE.equals(artist.getIsActive())));
+    public ResponseEntity<ArtistInternalResponse> getArtistById(@PathVariable UUID artistId) {
+        Artist artist = artistRepository.findById(artistId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ với ID: " + artistId));
+        
+        ArtistInternalResponse response = ArtistInternalResponse.builder()
+                .id(artist.getId())
+                .stageName(artist.getStageName())
+                .avatarUrl(artist.getAvatarUrl())
+                .build();
+                
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/admin")
-    public ResponseEntity<Page<Map<String, Object>>> getAllArtistsForAdmin(
+    public ResponseEntity<Page<ArtistAdminInternalResponse>> getAllArtistsForAdmin(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        String[] parts = sort.split(",");
-        String field = SORT_FIELDS.contains(parts[0].trim()) ? parts[0].trim() : "createdAt";
-        Sort.Direction direction = parts.length > 1 && "asc".equalsIgnoreCase(parts[1].trim())
-                ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, field));
-        return ResponseEntity.ok(artistRepository.findAll(pageable).map(this::toAdminMap));
+            @RequestParam(required = false, defaultValue = "createdAt,desc") String sort) {
+        
+        Sort sortObj = Sort.by(Sort.Direction.DESC, "createdAt");
+        if (sort != null && !sort.isBlank()) {
+            String[] parts = sort.split(",");
+            String field = parts[0].trim();
+            Sort.Direction direction = Sort.Direction.DESC;
+            if (parts.length > 1 && parts[1].trim().equalsIgnoreCase("asc")) {
+                direction = Sort.Direction.ASC;
+            }
+            if (!ALLOWED_SORT_FIELDS.contains(field)) {
+                field = "createdAt";
+            }
+            sortObj = Sort.by(direction, field);
+        }
+        
+        Pageable pageable = PageRequest.of(page, size, sortObj);
+        Page<Artist> artists = artistRepository.findAll(pageable);
+        
+        Page<ArtistAdminInternalResponse> response = artists.map(artist -> ArtistAdminInternalResponse.builder()
+                .id(artist.getId())
+                .email(artist.getEmail())
+                .stageName(artist.getStageName())
+                .avatarUrl(artist.getAvatarUrl())
+                .isActive(artist.getIsActive())
+                .followerCount(artist.getFollowerCount())
+                .createdAt(artist.getCreatedAt())
+                .build());
+                
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{artistId}/admin")
-    public ResponseEntity<Map<String, Object>> getArtistForAdmin(@PathVariable UUID artistId) {
-        return ResponseEntity.ok(toAdminMap(findArtist(artistId)));
+    public ResponseEntity<ArtistAdminInternalResponse> getArtistForAdmin(@PathVariable UUID artistId) {
+        Artist artist = artistRepository.findById(artistId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ với ID: " + artistId));
+                
+        ArtistAdminInternalResponse response = ArtistAdminInternalResponse.builder()
+                .id(artist.getId())
+                .email(artist.getEmail())
+                .stageName(artist.getStageName())
+                .avatarUrl(artist.getAvatarUrl())
+                .isActive(artist.getIsActive())
+                .followerCount(artist.getFollowerCount())
+                .createdAt(artist.getCreatedAt())
+                .build();
+                
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{artistId}/increment-follower")
     @Transactional
     public ResponseEntity<Void> incrementFollower(@PathVariable UUID artistId) {
-        Artist artist = findArtist(artistId);
+        if (!artistRepository.existsById(artistId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ với ID: " + artistId);
+        }
         artistRepository.incrementFollowerCount(artistId);
         return ResponseEntity.ok().build();
     }
@@ -64,33 +111,30 @@ public class InternalArtistController {
     @PutMapping("/{artistId}/decrement-follower")
     @Transactional
     public ResponseEntity<Void> decrementFollower(@PathVariable UUID artistId) {
-        findArtist(artistId);
+        if (!artistRepository.existsById(artistId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ với ID: " + artistId);
+        }
         artistRepository.decrementFollowerCount(artistId);
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Cập nhật trạng thái khóa/mở khóa tài khoản Artist.
+     * Chỉ được gọi từ Admin Service thông qua Internal API (yêu cầu header X-Internal-Secret).
+     */
     @PatchMapping("/{artistId}/status")
     @Transactional
-    public ResponseEntity<Void> updateArtistStatus(@PathVariable UUID artistId, @RequestBody Map<String, Boolean> payload) {
-        Boolean active = payload.get("isActive");
-        if (active == null) {
+    public ResponseEntity<Void> updateArtistStatus(
+            @PathVariable UUID artistId,
+            @RequestBody Map<String, Boolean> payload) {
+        Boolean isActive = payload.get("isActive");
+        if (isActive == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Trường 'isActive' là bắt buộc");
         }
-        Artist artist = findArtist(artistId);
-        artist.setIsActive(active);
+        Artist artist = artistRepository.findById(artistId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ với ID: " + artistId));
+        artist.setIsActive(isActive);
         artistRepository.save(artist);
         return ResponseEntity.ok().build();
-    }
-
-    private Artist findArtist(UUID id) {
-        return artistRepository.findById(id)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ với ID: " + id));
-    }
-
-    private Map<String, Object> toAdminMap(Artist artist) {
-        return Map.of("id", artist.getId(), "email", artist.getEmail(), "stageName", artist.getStageName(),
-                "avatarUrl", artist.getAvatarUrl() == null ? "" : artist.getAvatarUrl(),
-                "isActive", artist.getIsActive(), "followerCount",
-                artist.getFollowerCount() == null ? 0 : artist.getFollowerCount(), "createdAt", artist.getCreatedAt());
     }
 }

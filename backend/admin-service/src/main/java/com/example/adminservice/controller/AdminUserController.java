@@ -13,6 +13,7 @@ import java.util.UUID;
 @RequestMapping("/api/admin/users")
 @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class AdminUserController {
+
     private final UserServiceClient userServiceClient;
 
     public AdminUserController(UserServiceClient userServiceClient) {
@@ -23,25 +24,35 @@ public class AdminUserController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAllUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        return ResponseEntity.ok(ApiResponse.success(userServiceClient.getAllUsers(page, size, sort),
-                "Lấy danh sách người dùng thành công"));
+            @RequestParam(required = false) String sort) {
+        Map<String, Object> response = userServiceClient.getAllUsers(page, size, sort);
+        return ResponseEntity.ok(ApiResponse.success(response, "Lấy danh sách người dùng thành công"));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getUserById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(userServiceClient.getUserById(id),
-                "Lấy thông tin người dùng thành công"));
+        Map<String, Object> response = userServiceClient.getUserById(id);
+        return ResponseEntity.ok(ApiResponse.success(response, "Lấy thông tin người dùng thành công"));
     }
 
+    /**
+     * Khóa hoặc mở khóa tài khoản User.
+     * Admin gọi endpoint này, Admin Service sẽ tiếp tục gọi Internal API sang User Service.
+     * Body: { "isActive": true } để mở khóa, { "isActive": false } để khóa.
+     */
     @PatchMapping("/{id}/status")
-    public ResponseEntity<ApiResponse<Void>> updateUserStatus(@PathVariable UUID id,
-                                                                @RequestBody Map<String, Boolean> payload) {
-        if (payload.get("isActive") == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(400, "Trường 'isActive' là bắt buộc"));
+    public ResponseEntity<ApiResponse<Void>> updateUserStatus(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Boolean> payload) {
+        Boolean isActive = payload.get("isActive");
+        if (isActive == null) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(400, "Trường 'isActive' là bắt buộc"));
         }
         userServiceClient.updateUserStatus(id, payload);
-        return ResponseEntity.ok(ApiResponse.success(null,
-                Boolean.TRUE.equals(payload.get("isActive")) ? "Mở khóa tài khoản thành công" : "Khóa tài khoản thành công"));
+        String message = Boolean.TRUE.equals(isActive)
+                ? "Mở khóa tài khoản thành công"
+                : "Khóa tài khoản thành công";
+        return ResponseEntity.ok(ApiResponse.success(null, message));
     }
 }

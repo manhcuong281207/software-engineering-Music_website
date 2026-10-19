@@ -7,71 +7,80 @@ import com.example.usersservice.model.dto.response.PlaylistResponse;
 import com.example.usersservice.model.dto.response.PlaylistSongResponse;
 import com.example.usersservice.service.PlaylistService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/user/playlists")
-@RequiredArgsConstructor
-@PreAuthorize("hasRole('USER')")
 public class PlaylistController {
+
     private final PlaylistService playlistService;
 
-    private UUID currentUserId(Authentication authentication) {
-        try {
-            return UUID.fromString(authentication.getName());
-        } catch (RuntimeException exception) {
-            throw new com.example.usersservice.exception.ApiException(HttpStatus.UNAUTHORIZED, "Token người dùng không hợp lệ");
-        }
+    public PlaylistController(PlaylistService playlistService) {
+        this.playlistService = playlistService;
+    }
+
+    private UUID getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return UUID.fromString((String) auth.getPrincipal());
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<PlaylistResponse>> createPlaylist(
-            @Valid @RequestBody PlaylistCreateRequest request, Authentication authentication) {
-        PlaylistResponse response = playlistService.createPlaylist(request, currentUserId(authentication));
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Tạo playlist thành công"));
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<PlaylistResponse>> createPlaylist(@Valid @RequestBody PlaylistCreateRequest request) {
+        PlaylistResponse response = playlistService.createPlaylist(request, getCurrentUserId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(response, "Tạo playlist thành công"));
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<ApiResponse<Page<PlaylistResponse>>> getMyPlaylists(
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
-            Authentication authentication) {
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        return ResponseEntity.ok(ApiResponse.success(playlistService.getUserPlaylists(currentUserId(authentication), pageable),
-                "Lấy danh sách playlist thành công"));
+        Page<PlaylistResponse> response = playlistService.getUserPlaylists(getCurrentUserId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(response, "Lấy danh sách playlist thành công"));
     }
 
     @PostMapping("/{playlistId}/songs")
-    public ResponseEntity<ApiResponse<PlaylistSongResponse>> addSongToPlaylist(@PathVariable UUID playlistId,
-            @Valid @RequestBody PlaylistSongAddRequest request, Authentication authentication) {
-        PlaylistSongResponse response = playlistService.addSongToPlaylist(playlistId, request, currentUserId(authentication));
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Thêm bài hát vào playlist thành công"));
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<PlaylistSongResponse>> addSongToPlaylist(
+            @PathVariable UUID playlistId,
+            @Valid @RequestBody PlaylistSongAddRequest request) {
+        PlaylistSongResponse response = playlistService.addSongToPlaylist(playlistId, request, getCurrentUserId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(response, "Thêm bài hát vào playlist thành công"));
     }
 
     @DeleteMapping("/{playlistId}/songs/{songId}")
-    public ResponseEntity<ApiResponse<Void>> removeSongFromPlaylist(@PathVariable UUID playlistId,
-            @PathVariable UUID songId, Authentication authentication) {
-        playlistService.removeSongFromPlaylist(playlistId, songId, currentUserId(authentication));
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<Void>> removeSongFromPlaylist(
+            @PathVariable UUID playlistId,
+            @PathVariable UUID songId) {
+        playlistService.removeSongFromPlaylist(playlistId, songId, getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.success(null, "Xóa bài hát khỏi playlist thành công"));
     }
 
     @GetMapping("/{playlistId}/songs")
-    public ResponseEntity<ApiResponse<Page<PlaylistSongResponse>>> getPlaylistSongs(@PathVariable UUID playlistId,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
-            Authentication authentication) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("addedAt").descending());
-        return ResponseEntity.ok(ApiResponse.success(
-                playlistService.getPlaylistSongs(playlistId, currentUserId(authentication), pageable),
-                "Lấy danh sách bài hát trong playlist thành công"));
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<Page<PlaylistSongResponse>>> getPlaylistSongs(
+            @PathVariable UUID playlistId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<PlaylistSongResponse> response = playlistService.getPlaylistSongs(playlistId, getCurrentUserId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(response, "Lấy danh sách bài hát trong playlist thành công"));
     }
 }

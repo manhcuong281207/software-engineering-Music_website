@@ -1,11 +1,6 @@
 package com.example.usersservice.model.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,18 +17,25 @@ import java.util.UUID;
 @Entity
 @Table(name = "playlists")
 public class Playlist {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
     @Column(name = "user_id", nullable = false)
     private UUID userId;
+
     @Column(nullable = false)
     private String name;
+
     private String description;
+
     @Column(name = "cover_image")
     private String coverImage;
+
     @Column(name = "is_public")
     private Boolean isPublic;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

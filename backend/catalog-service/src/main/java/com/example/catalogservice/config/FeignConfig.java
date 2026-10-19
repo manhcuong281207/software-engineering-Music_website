@@ -7,11 +7,14 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class FeignConfig {
+
     @Value("${internal.api.secret}")
     private String internalApiSecret;
 
     @Bean
-    public RequestInterceptor internalApiRequestInterceptor() {
-        return template -> template.header("X-Internal-Secret", internalApiSecret);
+    public RequestInterceptor requestInterceptor() {
+        return requestTemplate -> {
+            requestTemplate.header("X-Internal-Secret", internalApiSecret);
+        };
     }
 }

@@ -10,12 +10,13 @@ import java.util.UUID;
 
 @FeignClient(name = "artists-service", url = "${artist.service.url}", configuration = FeignConfig.class)
 public interface ArtistServiceClient {
+
+    @PutMapping("/api/internal/artists/{id}/increment-follower")
+    void incrementFollowerCount(@PathVariable("id") UUID id);
+
+    @PutMapping("/api/internal/artists/{id}/decrement-follower")
+    void decrementFollowerCount(@PathVariable("id") UUID id);
+
     @GetMapping("/api/internal/artists/{id}")
     ArtistInternalResponse getArtistDetails(@PathVariable("id") UUID id);
-
-    @PutMapping("/api/internal/artists/{artistId}/increment-follower")
-    void incrementFollowerCount(@PathVariable("artistId") UUID artistId);
-
-    @PutMapping("/api/internal/artists/{artistId}/decrement-follower")
-    void decrementFollowerCount(@PathVariable("artistId") UUID artistId);
 }
