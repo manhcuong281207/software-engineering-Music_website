@@ -14,24 +14,23 @@ import com.example.usersservice.repository.PlaylistRepository;
 import com.example.usersservice.repository.PlaylistSongRepository;
 import feign.FeignException;
 import org.modelmapper.ModelMapper;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class PlaylistService {
+
     private final PlaylistRepository playlistRepository;
     private final PlaylistSongRepository playlistSongRepository;
     private final CatalogServiceClient catalogServiceClient;
     private final ModelMapper modelMapper;
 
-    public PlaylistService(PlaylistRepository playlistRepository, PlaylistSongRepository playlistSongRepository,
-                           CatalogServiceClient catalogServiceClient, ModelMapper modelMapper) {
+    public PlaylistService(PlaylistRepository playlistRepository, PlaylistSongRepository playlistSongRepository, CatalogServiceClient catalogServiceClient, ModelMapper modelMapper) {
         this.playlistRepository = playlistRepository;
         this.playlistSongRepository = playlistSongRepository;
         this.catalogServiceClient = catalogServiceClient;
@@ -42,67 +41,84 @@ public class PlaylistService {
     public PlaylistResponse createPlaylist(PlaylistCreateRequest request, UUID userId) {
         Playlist playlist = modelMapper.map(request, Playlist.class);
         playlist.setUserId(userId);
-        if (playlist.getIsPublic() == null) playlist.setIsPublic(false);
-        playlist.setCreatedAt(LocalDateTime.now());
-        return modelMapper.map(playlistRepository.save(playlist), PlaylistResponse.class);
+        if (playlist.getIsPublic() == null) {
+            playlist.setIsPublic(false);
+        }
+        playlist.setCreatedAt(java.time.LocalDateTime.now());
+        Playlist saved = playlistRepository.save(playlist);
+        return modelMapper.map(saved, PlaylistResponse.class);
     }
 
     @Transactional(readOnly = true)
     public Page<PlaylistResponse> getUserPlaylists(UUID userId, Pageable pageable) {
-        return playlistRepository.findByUserId(userId, pageable).map(playlist -> modelMapper.map(playlist, PlaylistResponse.class));
+        return playlistRepository.findByUserId(userId, pageable)
+                .map(p -> modelMapper.map(p, PlaylistResponse.class));
     }
 
     @Transactional
     public PlaylistSongResponse addSongToPlaylist(UUID playlistId, PlaylistSongAddRequest request, UUID userId) {
-        Playlist playlist = getPlaylist(playlistId);
-        requireOwner(playlist, userId);
-        PlaylistSongId id = new PlaylistSongId(playlistId, request.getSongId());
-        if (playlistSongRepository.existsById(id)) throw new ApiException(HttpStatus.CONFLICT, "Bài hát đã có trong playlist");
+        Playlist playlist = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy playlist"));
+        
+        if (!playlist.getUserId().equals(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Bạn không có quyền chỉnh sửa playlist này");
+        }
 
-        SongInternalResponse song;
+        PlaylistSongId id = new PlaylistSongId(playlistId, request.getSongId());
+        if (playlistSongRepository.existsById(id)) {
+            throw new ApiException(HttpStatus.CONFLICT, "Bài hát đã có trong playlist");
+        }
+
+        SongInternalResponse songInfo;
         try {
-            song = catalogServiceClient.getSongDetails(request.getSongId());
-        } catch (FeignException.NotFound exception) {
+            songInfo = catalogServiceClient.getSongDetails(request.getSongId());
+        } catch (FeignException.NotFound e) {
             throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy bài hát trên hệ thống");
-        } catch (FeignException exception) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi khi gọi Catalog Service: " + exception.getMessage());
+        } catch (FeignException e) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi khi gọi Catalog Service: " + e.getMessage());
         }
 
         PlaylistSong playlistSong = PlaylistSong.builder()
                 .playlistId(playlistId)
                 .songId(request.getSongId())
-                .songTitle(song.getTitle())
-                .artistName(song.getOwnerName())
-                .coverImage(song.getCoverImage())
-                .addedAt(LocalDateTime.now())
+                .songTitle(songInfo.getTitle())
+                .artistName(songInfo.getOwnerName())
+                .coverImage(songInfo.getCoverImage())
+                .addedAt(java.time.LocalDateTime.now())
                 .build();
-        return modelMapper.map(playlistSongRepository.save(playlistSong), PlaylistSongResponse.class);
+        
+        PlaylistSong saved = playlistSongRepository.save(playlistSong);
+        return modelMapper.map(saved, PlaylistSongResponse.class);
     }
 
     @Transactional
     public void removeSongFromPlaylist(UUID playlistId, UUID songId, UUID userId) {
-        Playlist playlist = getPlaylist(playlistId);
-        requireOwner(playlist, userId);
+        Playlist playlist = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy playlist"));
+                
+        if (!playlist.getUserId().equals(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Bạn không có quyền chỉnh sửa playlist này");
+        }
+
         PlaylistSongId id = new PlaylistSongId(playlistId, songId);
-        if (!playlistSongRepository.existsById(id)) throw new ApiException(HttpStatus.NOT_FOUND, "Bài hát không tồn tại trong playlist");
+        if (!playlistSongRepository.existsById(id)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Bài hát không tồn tại trong playlist");
+        }
+
         playlistSongRepository.deleteById(id);
     }
 
     @Transactional(readOnly = true)
     public Page<PlaylistSongResponse> getPlaylistSongs(UUID playlistId, UUID userId, Pageable pageable) {
-        Playlist playlist = getPlaylist(playlistId);
-        if (!Boolean.TRUE.equals(playlist.getIsPublic()) && !playlist.getUserId().equals(userId)) {
+        Playlist playlist = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy playlist"));
+
+        // Chỉ chủ sở hữu mới được xem playlist private
+        if (!playlist.getIsPublic() && !playlist.getUserId().equals(userId)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem playlist này");
         }
+
         return playlistSongRepository.findByPlaylistIdOrderByAddedAtDesc(playlistId, pageable)
-                .map(song -> modelMapper.map(song, PlaylistSongResponse.class));
-    }
-
-    private Playlist getPlaylist(UUID id) {
-        return playlistRepository.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy playlist"));
-    }
-
-    private void requireOwner(Playlist playlist, UUID userId) {
-        if (!playlist.getUserId().equals(userId)) throw new ApiException(HttpStatus.FORBIDDEN, "Bạn không có quyền chỉnh sửa playlist này");
+                .map(ps -> modelMapper.map(ps, PlaylistSongResponse.class));
     }
 }

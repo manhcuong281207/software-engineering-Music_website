@@ -1,7 +1,6 @@
 package com.example.catalogservice.client;
 
 import lombok.Data;
-
 import java.util.UUID;
 
 @Data

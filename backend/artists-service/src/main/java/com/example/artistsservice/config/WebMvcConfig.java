@@ -7,6 +7,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
+
     private final InternalApiInterceptor internalApiInterceptor;
 
     public WebMvcConfig(InternalApiInterceptor internalApiInterceptor) {
@@ -15,6 +16,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(internalApiInterceptor).addPathPatterns("/api/internal/**");
+        registry.addInterceptor(internalApiInterceptor)
+                .addPathPatterns("/api/internal/**");
     }
 }

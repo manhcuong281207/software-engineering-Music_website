@@ -1,30 +1,44 @@
 package com.example.catalogservice.service;
 
-import com.example.catalogservice.client.ArtistInternalResponse;
-import com.example.catalogservice.client.ArtistServiceClient;
-import com.example.catalogservice.exception.BadRequestException;
-import com.example.catalogservice.exception.FileStorageException;
 import com.example.catalogservice.exception.ResourceNotFoundException;
-import com.example.catalogservice.exception.UnauthorizedAccessException;
-import com.example.catalogservice.model.dto.request.*;
+import com.example.catalogservice.model.dto.request.SongUploadRequest;
 import com.example.catalogservice.model.dto.response.SongResponse;
-import com.example.catalogservice.model.entity.*;
-import com.example.catalogservice.repository.*;
+import com.example.catalogservice.model.entity.Album;
+import com.example.catalogservice.model.entity.Song;
+import com.example.catalogservice.model.dto.request.LyricsUpdateRequest;
+import com.example.catalogservice.model.dto.request.SongArtistAddRequest;
+import com.example.catalogservice.model.dto.request.AlbumSongAddRequest;
+import com.example.catalogservice.model.dto.request.AlbumSongReorderRequest;
+import com.example.catalogservice.model.entity.Lyrics;
+import com.example.catalogservice.model.entity.SongArtist;
+import com.example.catalogservice.repository.LyricsRepository;
+import com.example.catalogservice.repository.SongArtistRepository;
+import com.example.catalogservice.repository.SongRepository;
+import com.example.catalogservice.repository.AlbumRepository;
+import com.example.catalogservice.repository.GenreRepository;
+import com.example.catalogservice.model.entity.Genre;
+import com.example.catalogservice.exception.UnauthorizedAccessException;
+import com.example.catalogservice.exception.BadRequestException;
+import com.example.catalogservice.client.ArtistServiceClient;
+import com.example.catalogservice.client.ArtistInternalResponse;
 import feign.FeignException;
 import org.modelmapper.ModelMapper;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.stream.Collectors;
 
 @Service
 public class SongService {
+
     private final SongRepository songRepository;
     private final AlbumRepository albumRepository;
     private final LyricsRepository lyricsRepository;
@@ -34,9 +48,10 @@ public class SongService {
     private final CloudinaryService cloudinaryService;
     private final ModelMapper modelMapper;
 
-    public SongService(SongRepository songRepository, AlbumRepository albumRepository,
+    public SongService(SongRepository songRepository, AlbumRepository albumRepository, 
                        LyricsRepository lyricsRepository, SongArtistRepository songArtistRepository,
-                       GenreRepository genreRepository, ArtistServiceClient artistServiceClient,
+                       GenreRepository genreRepository,
+                       ArtistServiceClient artistServiceClient,
                        CloudinaryService cloudinaryService, ModelMapper modelMapper) {
         this.songRepository = songRepository;
         this.albumRepository = albumRepository;
@@ -49,85 +64,123 @@ public class SongService {
     }
 
     @Transactional
-    public SongResponse uploadSong(SongUploadRequest request, UUID ownerId) {
-        if (request.getAudioFile() == null || request.getAudioFile().isEmpty()) {
-            throw new BadRequestException("File nhạc không được để trống");
-        }
+    public SongResponse uploadSong(SongUploadRequest request, UUID ownerId) throws IOException {
         Song song = modelMapper.map(request, Song.class);
         song.setOwnerId(ownerId);
-        ArtistInternalResponse artist = artistServiceClient.getArtistById(ownerId);
-        song.setOwnerName(artist.getStageName());
-        song.setStatus("PENDING");
-        song.setIsDeleted(false);
-        song.setPlayCount(0);
-        song.setLikeCount(0);
-
+        
+        try {
+            ArtistInternalResponse artistInfo = artistServiceClient.getArtistById(ownerId);
+            song.setOwnerName(artistInfo.getStageName());
+        } catch (Exception e) {
+            song.setOwnerName("Unknown Artist");
+        }
+        
+        song.setStatus("PENDING"); 
+        
         if (request.getAlbumId() != null) {
             Album album = albumRepository.findById(request.getAlbumId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy album"));
-            if (!album.getOwnerId().equals(ownerId)) {
-                throw new UnauthorizedAccessException("Bạn không có quyền thêm bài hát vào album này");
-            }
-            if (!"PENDING".equals(album.getStatus())) {
-                throw new BadRequestException("Chỉ được thêm bài hát vào album đang chờ duyệt");
-            }
+                    .orElseThrow(() -> new ResourceNotFoundException("Album not found"));
             song.setAlbum(album);
-            if (request.getTrackNumber() == null) song.setTrackNumber((int) songRepository.countByAlbumId(album.getId()) + 1);
+            
+            // Auto-assign trackNumber if not provided
+            if (request.getTrackNumber() == null) {
+                int currentTracks = songRepository.countByAlbumId(album.getId());
+                song.setTrackNumber(currentTracks + 1);
+            }
+            
+            // Increase totalTracks
             album.setTotalTracks(album.getTotalTracks() + 1);
             albumRepository.save(album);
         }
 
-        List<Genre> genres = genreRepository.findAllById(request.getGenreIds());
-        if (genres.size() != request.getGenreIds().stream().distinct().count()) {
-            throw new BadRequestException("Một hoặc nhiều thể loại âm nhạc không hợp lệ hoặc bị lặp");
+        // Process Genres
+        if (request.getGenreIds() == null || request.getGenreIds().isEmpty()) {
+            throw new BadRequestException("Phải chọn ít nhất một thể loại âm nhạc");
         }
-        song.setGenres(new HashSet<>(genres));
-        try {
-            Map<?, ?> audio = cloudinaryService.uploadAudio(request.getAudioFile());
-            song.setAudioUrl((String) audio.get("secure_url"));
-            song.setAudioPublicId((String) audio.get("public_id"));
-            Object duration = audio.get("duration");
-            song.setDurationSeconds(duration instanceof Number number ? number.intValue() : 0);
-            if (request.getCoverImage() != null && !request.getCoverImage().isEmpty()) {
-                Map<?, ?> cover = cloudinaryService.uploadImage(request.getCoverImage());
-                song.setCoverImage((String) cover.get("secure_url"));
+        List<Genre> genresList = genreRepository.findAllById(request.getGenreIds());
+        if (genresList.size() != request.getGenreIds().size()) {
+            throw new BadRequestException("Một hoặc nhiều thể loại âm nhạc không hợp lệ");
+        }
+        song.setGenres(new HashSet<>(genresList));
+
+        // Upload Audio
+        if (request.getAudioFile() != null && !request.getAudioFile().isEmpty()) {
+            Map audioUploadResult = cloudinaryService.uploadAudio(request.getAudioFile());
+            song.setAudioUrl((String) audioUploadResult.get("secure_url"));
+            song.setAudioPublicId((String) audioUploadResult.get("public_id"));
+            
+            // Extract duration if possible, for now we mock it or expect frontend to send it, 
+            // Cloudinary returns duration for videos/audio
+            Object duration = audioUploadResult.get("duration");
+            if (duration != null) {
+                song.setDurationSeconds(((Double) duration).intValue());
+            } else {
+                song.setDurationSeconds(0);
             }
-        } catch (IOException exception) {
-            throw new FileStorageException("Không thể tải file nhạc hoặc ảnh bìa lên kho lưu trữ", exception);
         }
 
-        return modelMapper.map(songRepository.save(song), SongResponse.class);
-    }
+        // Upload Cover if provided
+        if (request.getCoverImage() != null && !request.getCoverImage().isEmpty()) {
+            Map coverUploadResult = cloudinaryService.uploadImage(request.getCoverImage());
+            song.setCoverImage((String) coverUploadResult.get("secure_url"));
+        }
 
+        Song savedSong = songRepository.save(song);
+        return modelMapper.map(savedSong, SongResponse.class);
+    }
+    
     @Transactional(readOnly = true)
     public Page<SongResponse> getSongsByOwner(UUID ownerId, Pageable pageable) {
-        return songRepository.findByOwnerId(ownerId, pageable).map(song -> modelMapper.map(song, SongResponse.class));
-    }
-
-    @Transactional(readOnly = true)
-    public Page<SongResponse> getSongsByStatus(String status, Pageable pageable) {
-        return songRepository.findByStatusAndIsDeletedFalse(status, pageable).map(song -> modelMapper.map(song, SongResponse.class));
+        return songRepository.findByOwnerId(ownerId, pageable)
+                .map(song -> modelMapper.map(song, SongResponse.class));
     }
 
     @Transactional
     public void updateSongStatus(UUID songId, String status) {
         Song song = songRepository.findById(songId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài hát"));
+                .orElseThrow(() -> new ResourceNotFoundException("Song not found"));
         song.setStatus(status);
         songRepository.save(song);
-        Album album = song.getAlbum();
-        if ("APPROVED".equals(status) && album != null && songRepository.countByAlbumIdAndStatus(album.getId(), "APPROVED")
-                == songRepository.countByAlbumId(album.getId())) {
-            album.setStatus("APPROVED");
-            albumRepository.save(album);
+
+        // Quy tắc nghiệp vụ: Nếu bài hát được APPROVED và thuộc về một album,
+        // kiểm tra xem toàn bộ bài hát trong album đó đã APPROVED chưa.
+        // Nếu có, tự động APPROVE luôn album đó.
+        if ("APPROVED".equals(status) && song.getAlbum() != null) {
+            Album album = song.getAlbum();
+            if (!"APPROVED".equals(album.getStatus())) {
+                long totalSongsInAlbum = songRepository.countByAlbumId(album.getId());
+                long approvedSongsInAlbum = songRepository.countByAlbumIdAndStatus(album.getId(), "APPROVED");
+                if (totalSongsInAlbum > 0 && approvedSongsInAlbum == totalSongsInAlbum) {
+                    album.setStatus("APPROVED");
+                    albumRepository.save(album);
+                }
+            }
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SongResponse> getSongsByStatus(String status, Pageable pageable) {
+        return songRepository.findByStatus(status, pageable)
+                .map(song -> modelMapper.map(song, SongResponse.class));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SongResponse> getPublicSongs() {
+        return songRepository.findByStatusAndIsDeletedFalse("APPROVED").stream()
+                .map(song -> modelMapper.map(song, SongResponse.class))
+                .collect(Collectors.toList());
     }
 
     @Transactional
     public void updateLyrics(UUID songId, LyricsUpdateRequest request, UUID artistId) {
-        Song song = findOwnedSong(songId, artistId);
-        Lyrics lyrics = lyricsRepository.findBySongId(songId).orElseGet(Lyrics::new);
-        lyrics.setId(songId);
+        Song song = songRepository.findById(songId)
+                .orElseThrow(() -> new ResourceNotFoundException("Song not found"));
+        
+        if (!song.getOwnerId().equals(artistId)) {
+            throw new UnauthorizedAccessException("Bạn không có quyền cập nhật bài hát này");
+        }
+
+        Lyrics lyrics = lyricsRepository.findBySongId(songId).orElse(new Lyrics());
         lyrics.setSong(song);
         lyrics.setContent(request.getContent());
         lyrics.setLanguage(request.getLanguage());
@@ -136,61 +189,99 @@ public class SongService {
 
     @Transactional
     public void addSongArtist(UUID songId, SongArtistAddRequest request, UUID artistId) {
-        Song song = findOwnedSong(songId, artistId);
-        if (song.getOwnerId().equals(request.getArtistId())) throw new BadRequestException("Không thể thêm chính mình làm nghệ sĩ phụ");
-        if (!List.of("FEATURED", "PRODUCER").contains(request.getRole())) throw new BadRequestException("Role nghệ sĩ không hợp lệ");
-        if (songArtistRepository.existsBySongIdAndArtistId(songId, request.getArtistId())) throw new BadRequestException("Nghệ sĩ này đã có trong bài hát");
-        ArtistInternalResponse artist;
-        try {
-            artist = artistServiceClient.getArtistById(request.getArtistId());
-        } catch (FeignException.NotFound exception) {
-            throw new ResourceNotFoundException("Nghệ sĩ không tồn tại trong hệ thống");
-        } catch (FeignException exception) {
-            throw new BadRequestException("Không thể xác minh nghệ sĩ phụ với Artist Service");
+        Song song = songRepository.findById(songId)
+                .orElseThrow(() -> new ResourceNotFoundException("Song not found"));
+        
+        if (!song.getOwnerId().equals(artistId)) {
+            throw new UnauthorizedAccessException("Bạn không có quyền cập nhật bài hát này");
         }
-        SongArtist collaborator = new SongArtist();
-        collaborator.setSong(song);
-        collaborator.setArtistId(request.getArtistId());
-        collaborator.setArtistName(artist.getStageName());
-        collaborator.setRole(request.getRole());
-        songArtistRepository.save(collaborator);
+
+        // 1. Chặn chủ sở hữu tự thêm chính mình làm nghệ sĩ phụ
+        if (song.getOwnerId().equals(request.getArtistId())) {
+            throw new BadRequestException("Không thể thêm chính mình làm nghệ sĩ phụ");
+        }
+
+        // 2. Chặn việc thêm trùng lặp một nghệ sĩ vào cùng một bài hát
+        if (songArtistRepository.existsBySongIdAndArtistId(songId, request.getArtistId())) {
+            throw new BadRequestException("Nghệ sĩ này đã được thêm vào bài hát");
+        }
+
+        // 3. Gọi Internal API sang artist-service để kiểm tra và lấy tên nghệ sĩ
+        ArtistInternalResponse artistInfo;
+        try {
+            artistInfo = artistServiceClient.getArtistById(request.getArtistId());
+        } catch (FeignException.NotFound e) {
+            throw new ResourceNotFoundException("Nghệ sĩ (artistId) không tồn tại trong hệ thống");
+        } catch (FeignException e) {
+            throw new RuntimeException("Lỗi giao tiếp với Artist Service: " + e.getMessage());
+        }
+
+        SongArtist songArtist = new SongArtist();
+        songArtist.setSong(song);
+        songArtist.setArtistId(request.getArtistId());
+        songArtist.setArtistName(artistInfo.getStageName());
+        songArtist.setRole(request.getRole());
+        songArtistRepository.save(songArtist);
     }
 
     @Transactional
     public void addSongToAlbum(UUID albumId, AlbumSongAddRequest request, UUID artistId) {
-        Album album = albumRepository.findById(albumId).orElseThrow(() -> new ResourceNotFoundException("Album không tồn tại"));
-        if (!album.getOwnerId().equals(artistId)) throw new UnauthorizedAccessException("Bạn không có quyền chỉnh sửa album này");
-        if (!"PENDING".equals(album.getStatus())) throw new BadRequestException("Chỉ được chỉnh sửa album đang chờ duyệt");
-        Song song = songRepository.findById(request.getSongId()).orElseThrow(() -> new ResourceNotFoundException("Bài hát không tồn tại"));
-        if (!song.getOwnerId().equals(artistId)) throw new UnauthorizedAccessException("Bạn không có quyền thêm bài hát này");
-        if (song.getAlbum() != null && song.getAlbum().getId().equals(albumId)) throw new BadRequestException("Bài hát đã nằm trong album này");
-        if (song.getAlbum() != null) {
-            Album previous = song.getAlbum();
-            previous.setTotalTracks(Math.max(0, previous.getTotalTracks() - 1));
-            albumRepository.save(previous);
+        Album album = albumRepository.findById(albumId)
+                .orElseThrow(() -> new ResourceNotFoundException("Album không tồn tại"));
+        
+        if (!album.getOwnerId().equals(artistId)) {
+            throw new UnauthorizedAccessException("Bạn không có quyền chỉnh sửa album này");
         }
+
+        Song song = songRepository.findById(request.getSongId())
+                .orElseThrow(() -> new ResourceNotFoundException("Bài hát không tồn tại"));
+
+        if (!song.getOwnerId().equals(artistId)) {
+            throw new UnauthorizedAccessException("Bạn không có quyền thêm bài hát này");
+        }
+
+        if (song.getAlbum() != null && song.getAlbum().getId().equals(albumId)) {
+            throw new BadRequestException("Bài hát đã nằm trong album này");
+        }
+
+        if (song.getAlbum() != null) {
+            Album oldAlbum = song.getAlbum();
+            oldAlbum.setTotalTracks(Math.max(0, oldAlbum.getTotalTracks() - 1));
+            albumRepository.save(oldAlbum);
+        }
+
         song.setAlbum(album);
         album.setTotalTracks(album.getTotalTracks() + 1);
-        song.setTrackNumber(request.getTrackNumber() == null ? album.getTotalTracks() : request.getTrackNumber());
-        songRepository.save(song);
         albumRepository.save(album);
+
+        if (request.getTrackNumber() != null) {
+            song.setTrackNumber(request.getTrackNumber());
+        } else {
+            song.setTrackNumber(album.getTotalTracks());
+        }
+        
+        songRepository.save(song);
     }
 
     @Transactional
     public void reorderSongsInAlbum(UUID albumId, AlbumSongReorderRequest request, UUID artistId) {
-        Album album = albumRepository.findById(albumId).orElseThrow(() -> new ResourceNotFoundException("Album không tồn tại"));
-        if (!album.getOwnerId().equals(artistId)) throw new UnauthorizedAccessException("Bạn không có quyền chỉnh sửa album này");
-        if (!"PENDING".equals(album.getStatus())) throw new BadRequestException("Chỉ được chỉnh sửa album đang chờ duyệt");
-        for (AlbumSongReorderRequest.SongOrder order : request.getSongOrders()) {
-            Song song = songRepository.findById(order.getSongId()).orElseThrow(() -> new ResourceNotFoundException("Bài hát không tồn tại"));
-            if (song.getAlbum() == null || !song.getAlbum().getId().equals(albumId)) throw new BadRequestException("Bài hát không thuộc album này");
-            song.setTrackNumber(order.getTrackNumber());
+        Album album = albumRepository.findById(albumId)
+                .orElseThrow(() -> new ResourceNotFoundException("Album không tồn tại"));
+        
+        if (!album.getOwnerId().equals(artistId)) {
+            throw new UnauthorizedAccessException("Bạn không có quyền chỉnh sửa album này");
         }
-    }
 
-    private Song findOwnedSong(UUID songId, UUID artistId) {
-        Song song = songRepository.findById(songId).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài hát"));
-        if (!song.getOwnerId().equals(artistId)) throw new UnauthorizedAccessException("Bạn không có quyền cập nhật bài hát này");
-        return song;
+        for (AlbumSongReorderRequest.SongOrder order : request.getSongOrders()) {
+            Song song = songRepository.findById(order.getSongId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Bài hát không tồn tại: " + order.getSongId()));
+            
+            if (song.getAlbum() == null || !song.getAlbum().getId().equals(albumId)) {
+                throw new BadRequestException("Bài hát " + song.getTitle() + " không thuộc album này");
+            }
+            
+            song.setTrackNumber(order.getTrackNumber());
+            songRepository.save(song);
+        }
     }
 }

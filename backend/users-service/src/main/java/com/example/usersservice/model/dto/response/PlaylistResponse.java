@@ -1,7 +1,6 @@
 package com.example.usersservice.model.dto.response;
 
 import lombok.Data;
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 

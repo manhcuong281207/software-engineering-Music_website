@@ -1,9 +1,11 @@
 package com.example.catalogservice.listener;
 
 import com.example.catalogservice.model.dto.event.ArtistProfileUpdatedEvent;
+import com.example.catalogservice.repository.AlbumRepository;
+import com.example.catalogservice.repository.SongRepository;
+import com.example.catalogservice.repository.SongArtistRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,15 +16,34 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class ArtistEventListener {
-    private final JdbcTemplate jdbc;
+
+    private final AlbumRepository albumRepository;
+    private final SongRepository songRepository;
+    private final SongArtistRepository songArtistRepository;
 
     @KafkaListener(topics = "artist-events-topic", groupId = "catalog-group")
     @Transactional
     public void handleArtistProfileUpdated(ArtistProfileUpdatedEvent event) {
-        UUID artistId = UUID.fromString(event.artistId());
-        jdbc.update("UPDATE albums SET owner_name = ? WHERE owner_id = ?", event.newName(), artistId);
-        jdbc.update("UPDATE songs SET owner_name = ? WHERE owner_id = ?", event.newName(), artistId);
-        jdbc.update("UPDATE song_artists SET artist_name = ? WHERE artist_id = ?", event.newName(), artistId);
-        log.info("Synchronized catalog denormalized artist data for {}", artistId);
+        log.info("Received ArtistProfileUpdatedEvent for artist: {}", event.getArtistId());
+        try {
+            UUID artistId = UUID.fromString(event.getArtistId());
+            String newName = event.getNewName();
+
+            // Cập nhật tên nghệ sĩ trong bảng Albums
+            albumRepository.updateOwnerName(artistId, newName);
+
+            // Cập nhật tên nghệ sĩ trong bảng Songs
+            songRepository.updateOwnerName(artistId, newName);
+
+            // Cập nhật tên nghệ sĩ trong bảng Song_Artists
+            songArtistRepository.updateArtistName(artistId, newName);
+
+            log.info("Successfully updated denormalized names for artist: {}", artistId);
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid UUID format for artistId: {}", event.getArtistId(), e);
+        } catch (Exception e) {
+            log.error("Error processing ArtistProfileUpdatedEvent", e);
+            throw e; 
+        }
     }
 }

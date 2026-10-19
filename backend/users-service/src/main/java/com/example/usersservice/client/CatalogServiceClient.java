@@ -10,6 +10,7 @@ import java.util.UUID;
 
 @FeignClient(name = "catalog-service", url = "${catalog.service.url}", configuration = FeignConfig.class)
 public interface CatalogServiceClient {
+
     @PutMapping("/api/internal/catalog/songs/{id}/increment-play")
     void incrementPlay(@PathVariable("id") UUID id);
 

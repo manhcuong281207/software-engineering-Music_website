@@ -1,10 +1,6 @@
 package com.example.usersservice.model.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,27 +10,27 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "follows")
-@IdClass(FollowArtistId.class)
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Entity
+@Table(name = "follow_artists")
+@IdClass(FollowArtistId.class)
 public class FollowArtist {
     @Id
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id")
     private UUID userId;
 
     @Id
-    @Column(name = "artist_id", nullable = false)
+    @Column(name = "artist_id")
     private UUID artistId;
 
     @Column(name = "artist_name", nullable = false)
     private String artistName;
 
-    @Column(name = "avatar_url")
-    private String avatarUrl;
+    @Column(name = "avatar")
+    private String avatar;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -1,94 +1,88 @@
 package com.example.catalogservice.advice;
 
-import com.example.catalogservice.exception.*;
+import com.example.catalogservice.exception.BadRequestException;
+import com.example.catalogservice.exception.FileStorageException;
+import com.example.catalogservice.exception.ResourceNotFoundException;
+import com.example.catalogservice.exception.UnauthorizedAccessException;
 import com.example.catalogservice.model.dto.response.ApiResponse;
-import jakarta.validation.ConstraintViolationException;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
 
 @RestControllerAdvice
-@Slf4j
 public class GlobalExceptionHandler {
+
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ApiResponse<Object>> notFound(ResourceNotFoundException exception) {
-        return error(HttpStatus.NOT_FOUND, exception.getMessage());
+    public ResponseEntity<ApiResponse<Object>> handleResourceNotFoundException(ResourceNotFoundException ex) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
     @ExceptionHandler(UnauthorizedAccessException.class)
-    public ResponseEntity<ApiResponse<Object>> forbidden(UnauthorizedAccessException exception) {
-        return error(HttpStatus.FORBIDDEN, exception.getMessage());
-    }
-
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiResponse<Object>> accessDenied(AccessDeniedException exception) {
-        return error(HttpStatus.FORBIDDEN, "Không có quyền truy cập vào tài nguyên này");
-    }
-
-    @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ApiResponse<Object>> authentication(AuthenticationException exception) {
-        return error(HttpStatus.UNAUTHORIZED, "Xác thực thất bại, token không hợp lệ hoặc không được cung cấp");
+    public ResponseEntity<ApiResponse<Object>> handleUnauthorizedAccessException(UnauthorizedAccessException ex) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
     @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<ApiResponse<Object>> badRequest(BadRequestException exception) {
-        return error(HttpStatus.BAD_REQUEST, exception.getMessage());
+    public ResponseEntity<ApiResponse<Object>> handleBadRequestException(BadRequestException ex) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(FileStorageException.class)
-    public ResponseEntity<ApiResponse<Object>> storage(FileStorageException exception) {
-        log.error("Catalog file storage failed", exception);
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
-    }
-
-    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, ConstraintViolationException.class})
-    public ResponseEntity<ApiResponse<Object>> validation(Exception exception) {
-        String message = "Dữ liệu đầu vào không hợp lệ";
-        if (exception instanceof MethodArgumentNotValidException invalid && !invalid.getBindingResult().getFieldErrors().isEmpty())
-            message = invalid.getBindingResult().getFieldErrors().get(0).getDefaultMessage();
-        else if (exception instanceof BindException invalid && !invalid.getBindingResult().getFieldErrors().isEmpty())
-            message = invalid.getBindingResult().getFieldErrors().get(0).getDefaultMessage();
-        else if (exception instanceof ConstraintViolationException violation) message = violation.getMessage();
-        return error(HttpStatus.BAD_REQUEST, message);
+    public ResponseEntity<ApiResponse<Object>> handleFileStorageException(FileStorageException ex) {
+        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<ApiResponse<Object>> uploadTooLarge(MaxUploadSizeExceededException exception) {
-        return error(HttpStatus.PAYLOAD_TOO_LARGE, "Kích thước file vượt quá giới hạn cho phép");
+    public ResponseEntity<ApiResponse<Object>> handleMaxSizeException(MaxUploadSizeExceededException exc) {
+        return buildErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE, "Kích thước file vượt quá giới hạn cho phép");
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAccessDeniedException(org.springframework.security.access.AccessDeniedException ex) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "Không có quyền truy cập vào tài nguyên này");
+    }
+
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAuthenticationException(org.springframework.security.core.AuthenticationException ex) {
+        return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Xác thực thất bại, token không hợp lệ hoặc không được cung cấp");
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Object>> unreadable(HttpMessageNotReadableException exception) {
-        return error(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào sai định dạng");
+    public ResponseEntity<ApiResponse<Object>> handleHttpMessageNotReadableException(HttpMessageNotReadableException ex) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào sai định dạng");
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Object>> invalidArgument(IllegalArgumentException exception) {
-        return error(HttpStatus.BAD_REQUEST, exception.getMessage());
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        String errorMessage = ex.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .findFirst()
+                .orElse("Dữ liệu đầu vào không hợp lệ");
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, errorMessage);
     }
 
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<ApiResponse<Object>> responseStatus(ResponseStatusException exception) {
-        HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
-        return error(status, exception.getReason() == null ? status.getReasonPhrase() : exception.getReason());
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ApiResponse<Object>> handleBindExceptions(BindException ex) {
+        String errorMessage = ex.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .findFirst()
+                .orElse("Dữ liệu đầu vào không hợp lệ");
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, errorMessage);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Object>> unexpected(Exception exception) {
-        log.error("Unhandled catalog service exception", exception);
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
+    public ResponseEntity<ApiResponse<Object>> handleGlobalException(Exception ex) {
+        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống không xác định: " + ex.getMessage());
     }
 
-    private ResponseEntity<ApiResponse<Object>> error(HttpStatus status, String message) {
-        return ResponseEntity.status(status).body(ApiResponse.error(status.value(), message));
+    private ResponseEntity<ApiResponse<Object>> buildErrorResponse(HttpStatus status, String message) {
+        ApiResponse<Object> response = ApiResponse.error(status.value(), message);
+        return new ResponseEntity<>(response, status);
     }
 }

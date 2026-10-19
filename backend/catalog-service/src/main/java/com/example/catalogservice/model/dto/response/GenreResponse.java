@@ -1,7 +1,6 @@
 package com.example.catalogservice.model.dto.response;
 
 import lombok.Data;
-
 import java.util.UUID;
 
 @Data

@@ -280,5 +280,3 @@ Nhóm API này dùng để quản lý lượt thả tim và lịch sử nghe nh�
 - **Mô tả:** Lấy lịch sử nghe nhạc gần đây của người dùng hiện tại.
 - **Response thành công (200 OK):**
   Trả về mảng lịch sử nghe nhạc, sắp xếp mới nhất lên đầu.
-
-> Các endpoint yêu thích, theo dõi và lịch sử nghe yêu cầu JWT có role `USER`. `page` bắt đầu từ 0; `size` từ 1 đến 100. Khi thêm yêu thích bài hát/album, tài nguyên phải ở trạng thái `APPROVED`; khi follow, hồ sơ nghệ sĩ phải đang hoạt động. User Service lưu snapshot metadata tại schema của mình và gọi API nội bộ có `X-Internal-Secret` để đồng bộ lượt nghe/yêu thích/follower count. Nếu service đích không đồng bộ counter được, request trả `503 Service Unavailable` và transaction local rollback. Do đây là dual-write giữa hai service, lỗi mạng sau khi service đích đã xử lý request vẫn có thể cần đối soát vận hành.
