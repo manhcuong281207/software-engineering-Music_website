@@ -31,7 +31,8 @@ public class InternalArtistController {
     public ResponseEntity<Map<String, Object>> getArtistById(@PathVariable UUID artistId) {
         Artist artist = findArtist(artistId);
         return ResponseEntity.ok(Map.of("id", artist.getId(), "stageName", artist.getStageName(),
-                "avatarUrl", artist.getAvatarUrl() == null ? "" : artist.getAvatarUrl()));
+            "avatarUrl", artist.getAvatarUrl() == null ? "" : artist.getAvatarUrl(),
+            "isActive", Boolean.TRUE.equals(artist.getIsActive())));
     }
 
     @GetMapping("/admin")
