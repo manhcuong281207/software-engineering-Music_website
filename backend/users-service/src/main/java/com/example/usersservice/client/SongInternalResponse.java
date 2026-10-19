@@ -10,4 +10,6 @@ public class SongInternalResponse {
     private String title;
     private String ownerName;
     private String coverImage;
+    private Integer durationSeconds;
+    private String status;
 }
