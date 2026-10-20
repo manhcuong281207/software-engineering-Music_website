@@ -1,44 +1,37 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { Play, Heart } from "lucide-react";
 import { CoverImage } from "./CoverImage";
-import { useFavoriteStore } from "../../store/useFavoriteStore";
+import { useFavorites } from "../../hooks/useFavorites";
+import { AddToPlaylistMenu } from "../playlist/AddToPlaylistMenu";
 
 /**
- * Component hiển thị 1 dòng bài hát trong danh sách ngang (Album Detail, Artist Profile, Liked Songs).
+ * Component hiển thị 1 dòng bài hát trong danh sách ngang (Album Detail, Artist Profile, Playlist Detail).
  */
-export const SongRow = ({ index, song, onPlayClick, isPlaying, extraAction }) => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const isSongLiked = useFavoriteStore((state) => state.isSongLiked);
-  const toggleLikeSong = useFavoriteStore((state) => state.toggleLikeSong);
+export const SongRow = ({
+  index,
+  song,
+  onPlayClick,
+  isPlaying,
+  currentPlaylistId = null,
+  onRemove = null,
+}) => {
   const [isHovered, setIsHovered] = useState(false);
+  const { isFavoriteSong, toggleFavoriteSong } = useFavorites();
 
-  const songId = song?.id || song?.songId;
-  const isLiked = isSongLiked(songId);
+  const isLiked = isFavoriteSong(song?.id || song?.songId);
 
-  // Xử lý hiển thị thời lượng (ms -> mm:ss hoặc seconds -> mm:ss)
-  const formatDuration = (ms, seconds) => {
-    let totalSeconds = 0;
-    if (typeof seconds === "number" && seconds > 0) {
-      totalSeconds = seconds;
-    } else if (typeof ms === "number" && ms > 0) {
-      totalSeconds = Math.floor(ms / 1000);
-    } else {
-      return "--:--";
-    }
+  // Xử lý hiển thị thời lượng (ms -> mm:ss)
+  const formatDuration = (ms) => {
+    if (!ms) return "--:--";
+    const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const handleLike = (e) => {
     e.stopPropagation(); // Ngăn sự kiện click lan ra ngoài (gây play nhạc)
-    toggleLikeSong(song, {
-      onLogin: () => navigate("/login"),
-      queryClient,
-    });
+    toggleFavoriteSong(song);
   };
 
   return (
@@ -51,13 +44,13 @@ export const SongRow = ({ index, song, onPlayClick, isPlaying, extraAction }) =>
       {/* Cột STT / Nút Play */}
       <div className="w-6 text-right flex justify-end">
         {isHovered ? (
-          <button className="text-white">
+          <button className="text-white hover:scale-110 active:scale-95 transition-transform cursor-pointer">
             <Play size={16} fill="currentColor" />
           </button>
         ) : (
           <span
             className={`text-sm ${
-              isPlaying ? "text-spotify-primary font-bold" : "text-spotify-sub"
+              isPlaying ? "text-[#fa2d48] font-bold" : "text-spotify-sub"
             }`}
           >
             {index}
@@ -78,7 +71,7 @@ export const SongRow = ({ index, song, onPlayClick, isPlaying, extraAction }) =>
       <div className="flex-1 flex flex-col justify-center min-w-0">
         <span
           className={`text-base truncate ${
-            isPlaying ? "text-spotify-primary font-bold" : "text-white"
+            isPlaying ? "text-[#fa2d48] font-bold" : "text-white"
           }`}
         >
           {song.title}
@@ -88,39 +81,40 @@ export const SongRow = ({ index, song, onPlayClick, isPlaying, extraAction }) =>
         </span>
       </div>
 
-      {/* Extra action (ví dụ: ngày thêm vào playlist/yêu thích) nếu có */}
-      {extraAction && (
-        <div className="hidden md:flex items-center text-xs text-spotify-sub min-w-[120px]">
-          {extraAction}
-        </div>
-      )}
-
-      {/* Hành động (Like) - Luôn hiện nếu đã thích, hoặc hiện khi hover */}
+      {/* Hành động (Like) - Hiện khi đã like hoặc khi hover */}
       <div
-        className={`w-10 flex items-center justify-center transition-all ${
+        className={`w-10 flex items-center justify-center transition-opacity ${
           isLiked ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
         <button
-          type="button"
-          className={`p-1.5 rounded-full hover:scale-110 active:scale-95 transition-all ${
+          className={`p-1.5 rounded-full hover:scale-110 active:scale-95 transition-all cursor-pointer ${
             isLiked
-              ? "text-spotify-primary hover:text-spotify-primary-hover"
+              ? "text-[#fa2d48]"
               : "text-spotify-sub hover:text-white"
           }`}
           onClick={handleLike}
-          title={isLiked ? "Xóa khỏi Bài hát đã thích" : "Lưu vào Bài hát đã thích"}
+          title={isLiked ? "Xóa khỏi danh sách yêu thích" : "Thêm vào danh sách yêu thích"}
         >
           <Heart
             size={18}
-            className={isLiked ? "fill-spotify-primary text-spotify-primary" : ""}
+            className={isLiked ? "fill-[#fa2d48] text-[#fa2d48]" : "currentColor"}
           />
         </button>
       </div>
 
       {/* Thời lượng */}
       <div className="w-12 text-sm text-spotify-sub text-right">
-        {formatDuration(song.durationMs, song.durationSeconds)}
+        {formatDuration(song.durationMs || (song.durationSeconds ? song.durationSeconds * 1000 : 0))}
+      </div>
+
+      {/* Tùy chọn khác (Thêm vào playlist / Gỡ khỏi playlist) */}
+      <div className="w-8 flex items-center justify-end">
+        <AddToPlaylistMenu
+          song={song}
+          currentPlaylistId={currentPlaylistId}
+          onRemove={onRemove}
+        />
       </div>
     </div>
   );

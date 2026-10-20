@@ -1,20 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { BottomPlayer } from './BottomPlayer';
-import { useAuthStore } from '../store/useAuthStore';
-import { useFavoriteStore } from '../store/useFavoriteStore';
 
 export const MainLayout = () => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const initFavorites = useFavoriteStore((state) => state.initFavorites);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      initFavorites();
-    }
-  }, [isAuthenticated, initFavorites]);
   return (
     <div className="h-screen w-full bg-spotify-black flex flex-col overflow-hidden text-spotify-text">
       {/* Khung chứa Sidebar và Main Content */}

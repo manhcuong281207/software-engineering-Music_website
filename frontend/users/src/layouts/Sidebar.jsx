@@ -1,60 +1,60 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Search,
   Library,
   Plus,
   List,
+  Pin,
+  Heart,
+  Play,
   ChevronLeft,
   ChevronRight,
-  Music,
-  Heart,
-  MoreVertical,
-  Edit3,
-  Trash2,
-  ListPlus,
+  ListMusic,
 } from "lucide-react";
+import { useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/Button";
+import { CoverImage } from "../components/ui/CoverImage";
 import { useAuthStore } from "../store/useAuthStore";
-import { useFavoriteStore } from "../store/useFavoriteStore";
-import { usePlaylistModalStore } from "../store/usePlaylistModalStore";
-import { getUserPlaylists } from "../api/users/playlist";
+import { useFavorites } from "../hooks/useFavorites";
+import { useFollowArtists } from "../hooks/useFollowArtists";
+import { usePlaylists } from "../hooks/usePlaylists";
+import { usePlayerStore } from "../store/usePlayerStore";
+import { getArtistSongs, getAlbumSongs, getSongById } from "../api/catalog/public";
+import { getPlaylistSongsApi } from "../api/users/playlists";
+import { CreatePlaylistModal } from "../components/playlist/CreatePlaylistModal";
 import { showLoginToast } from "../utils/toastUtils";
 
-const filters = ["Playlist", "Album", "Nghệ sĩ"];
+// Danh mục bộ lọc theo đúng thiết kế tham khảo
+const FILTERS = ["Playlist", "EP", "Album", "Nghệ sĩ"];
 
 export const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const { openCreate, openEdit, openDelete, openAddSong } = usePlaylistModalStore();
 
-  const [width, setWidth] = useState(320);
+  const { favoriteSongs, favoriteAlbums } = useFavorites();
+  const { followedArtists } = useFollowArtists();
+  const { playlists } = usePlaylists();
+  const { playSongWithContext } = usePlayerStore();
+
+  const isLikedActive = location.pathname === "/collection/tracks";
+
+  const [width, setWidth] = useState(320); // Mặc định w-80 = 320px
   const [isResizing, setIsResizing] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [sidebarSearch, setSidebarSearch] = useState("");
-  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  const likedSongCount = useFavoriteStore((state) => state.likedSongCount);
-  const isLikedActive = location.pathname === '/liked-songs' || location.pathname === '/collection/tracks';
-
-  // Fetch playlist thật của user
-  const { data: playlists = [], isLoading: isPlaylistsLoading } = useQuery({
-    queryKey: ["userPlaylists"],
-    queryFn: () => getUserPlaylists({ page: 0, size: 50 }),
-    enabled: isAuthenticated,
-  });
-
-  const handleProtectedAction = (actionName, cb) => {
+  const handleProtectedAction = (actionName) => {
     if (!isAuthenticated) {
-      showLoginToast(actionName, () => navigate('/login'));
+      showLoginToast(actionName);
       return false;
     }
-    if (cb) cb();
     return true;
   };
 
+  // --- Resizing Sidebar Logic ---
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing) return;
@@ -83,14 +83,7 @@ export const Sidebar = () => {
     };
   }, [isResizing]);
 
-  // Click outside to close context menu
-  useEffect(() => {
-    const handleCloseMenu = () => setActiveMenuId(null);
-    window.addEventListener("click", handleCloseMenu);
-    return () => window.removeEventListener("click", handleCloseMenu);
-  }, []);
-
-  // --- Scroll Logic cho Filters ---
+  // --- Scroll Logic cho Filter Pills ---
   const scrollRef = useRef(null);
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(true);
@@ -118,26 +111,182 @@ export const Sidebar = () => {
     scrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
   };
 
-  // Filter playlists
-  const visiblePlaylists = playlists.filter((pl) => {
-    if (!sidebarSearch.trim()) return true;
-    return pl.name.toLowerCase().includes(sidebarSearch.toLowerCase().trim());
-  });
+  // --- Phát bài hát yêu thích ---
+  const handlePlayLikedSongs = async (e) => {
+    e.stopPropagation();
+    if (favoriteSongs.length === 0) {
+      navigate("/collection/tracks");
+      return;
+    }
+    try {
+      const firstSongId = favoriteSongs[0].songId;
+      const res = await getSongById(firstSongId);
+      const fullSong = res?.data;
+      if (fullSong) {
+        const pool = favoriteSongs.map((f) =>
+          f.songId === fullSong.id
+            ? fullSong
+            : { id: f.songId, title: f.songTitle, artist: f.artistName, coverImage: f.coverImage }
+        );
+        playSongWithContext(fullSong, pool, 0);
+      }
+    } catch (err) {
+      console.error("Lỗi phát bài hát yêu thích từ Sidebar:", err);
+    }
+  };
+
+  // --- Phát nhạc nghệ sĩ ---
+  const handlePlayArtist = async (e, artistId) => {
+    e.stopPropagation();
+    try {
+      const res = await getArtistSongs(artistId, { size: 50, sort: "likeCount,desc" });
+      const songs = res?.data?.content || [];
+      if (songs.length > 0) {
+        const randomIndex = Math.floor(Math.random() * songs.length);
+        playSongWithContext(songs[randomIndex], songs, randomIndex);
+      }
+    } catch (err) {
+      console.error("Lỗi phát nhạc nghệ sĩ từ Sidebar:", err);
+    }
+  };
+
+  // --- Phát album ---
+  const handlePlayAlbum = async (e, albumId) => {
+    e.stopPropagation();
+    try {
+      const res = await getAlbumSongs(albumId, { size: 50, sort: "createdAt,asc" });
+      const songs = res?.data?.content || [];
+      if (songs.length > 0) {
+        playSongWithContext(songs[0], songs, 0);
+      }
+    } catch (err) {
+      console.error("Lỗi phát album từ Sidebar:", err);
+    }
+  };
+
+  // --- Phát danh sách phát (Playlist) ---
+  const handlePlayPlaylist = async (e, playlistId) => {
+    e.stopPropagation();
+    try {
+      const res = await getPlaylistSongsApi(playlistId, { size: 50 });
+      const songs = res?.data?.content || [];
+      if (songs.length > 0) {
+        const pool = songs.map((s) => ({
+          id: s.songId,
+          title: s.songTitle,
+          artist: s.artistName,
+          artistName: s.artistName,
+          coverImage: s.coverImage,
+        }));
+        const firstSongRes = await getSongById(songs[0].songId);
+        if (firstSongRes?.data) {
+          playSongWithContext(firstSongRes.data, pool, 0);
+        } else {
+          navigate(`/playlist/${playlistId}`);
+        }
+      } else {
+        navigate(`/playlist/${playlistId}`);
+      }
+    } catch (err) {
+      console.error("Lỗi phát playlist từ Sidebar:", err);
+      navigate(`/playlist/${playlistId}`);
+    }
+  };
+
+  // --- Tổng hợp và lọc danh sách Nghệ sĩ, Album & Playlist ---
+  const libraryItems = useMemo(() => {
+    let items = [];
+
+    // 1. Thêm danh sách Nghệ sĩ đã theo dõi
+    followedArtists.forEach((artist) => {
+      items.push({
+        id: artist.artistId || artist.id,
+        title: artist.artistName || artist.stageName,
+        subtitle: "Nghệ sĩ",
+        image: artist.avatar || artist.avatarUrl,
+        type: "artist",
+        raw: artist,
+      });
+    });
+
+    // 2. Thêm danh sách Album yêu thích
+    favoriteAlbums.forEach((album) => {
+      const albumTitle = album.albumTitle || album.title || "Album";
+      const isEp =
+        album.albumType?.toUpperCase() === "EP" ||
+        albumTitle.toLowerCase().includes("ep");
+      const displayType = isEp ? "EP" : "Album";
+
+      items.push({
+        id: album.albumId || album.id,
+        title: albumTitle,
+        subtitle: `${displayType} • ${album.artistName || album.ownerName || "Nghệ sĩ"}`,
+        image: album.coverImage || album.coverUrl,
+        type: "album",
+        albumType: displayType,
+        raw: {
+          ...album,
+          id: album.albumId || album.id,
+          title: albumTitle,
+          albumType: displayType,
+        },
+      });
+    });
+
+    // 3. Thêm danh sách Playlist của người dùng
+    playlists.forEach((playlist) => {
+      items.push({
+        id: playlist.id,
+        title: playlist.name,
+        subtitle: `Danh sách phát • ${playlist.isPublic ? "Công khai" : "Riêng tư"}`,
+        image: playlist.coverImage || null,
+        type: "playlist",
+        raw: playlist,
+      });
+    });
+
+    // 4. Áp dụng bộ lọc danh mục
+    if (selectedFilter) {
+      if (selectedFilter === "Album") {
+        items = items.filter((item) => item.type === "album" && item.albumType !== "EP");
+      } else if (selectedFilter === "EP") {
+        items = items.filter((item) => item.type === "album" && item.albumType === "EP");
+      } else if (selectedFilter === "Nghệ sĩ") {
+        items = items.filter((item) => item.type === "artist");
+      } else if (selectedFilter === "Playlist") {
+        items = items.filter((item) => item.type === "playlist");
+      }
+    }
+
+    // 5. Áp dụng tìm kiếm theo từ khóa
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      items = items.filter(
+        (item) =>
+          item.title?.toLowerCase().includes(q) ||
+          item.subtitle?.toLowerCase().includes(q)
+      );
+    }
+
+    return items;
+  }, [followedArtists, favoriteAlbums, playlists, selectedFilter, searchQuery]);
+
+  // Kiểm tra hiển thị mục "Bài hát đã thích"
+  const shouldShowLikedSongs =
+    (!selectedFilter || selectedFilter === "Playlist") &&
+    (!searchQuery.trim() ||
+      "bài hát đã thích".includes(searchQuery.toLowerCase().trim()));
 
   return (
     <aside
       className="flex-shrink-0 flex flex-col gap-2 h-full z-10 relative group"
       style={{ width: `${width}px` }}
     >
-      {/* Library Container */}
+      {/* Library */}
       <div className="bg-spotify-base rounded-lg flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 pb-2 text-spotify-sub font-bold">
-          <div
-            onClick={() => navigate('/library')}
-            className="flex items-center gap-2 flex-1 min-w-0 hover:text-white transition cursor-pointer"
-            title="Xem toàn bộ thư viện"
-          >
+          <div className="flex items-center gap-2 flex-1 min-w-0 hover:text-white transition cursor-pointer">
             <Library size={24} className="flex-shrink-0" />
             <span className="text-base truncate">Thư viện</span>
           </div>
@@ -147,7 +296,11 @@ export const Sidebar = () => {
               size="sm"
               tooltip="Tạo danh sách phát mới"
               tooltipPosition="bottom-right"
-              onClick={() => handleProtectedAction("tạo danh sách phát mới", openCreate)}
+              onClick={() => {
+                if (handleProtectedAction("tạo danh sách phát mới")) {
+                  setIsCreateModalOpen(true);
+                }
+              }}
             >
               <Plus size={16} />
               Tạo
@@ -178,11 +331,24 @@ export const Sidebar = () => {
               onScroll={handleScroll}
               className="flex items-center gap-2 px-4 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
             >
-              {filters.map((filter) => (
-                <Button key={filter} variant="dark" size="sm">
-                  {filter}
-                </Button>
-              ))}
+              {FILTERS.map((filter) => {
+                const isSelected = selectedFilter === filter;
+                return (
+                  <button
+                    key={filter}
+                    onClick={() =>
+                      setSelectedFilter(isSelected ? null : filter)
+                    }
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex-shrink-0 border ${
+                      isSelected
+                        ? "bg-white text-black border-white font-bold shadow-sm"
+                        : "bg-[#232323] hover:bg-[#2a2a2a] text-white border-transparent"
+                    }`}
+                  >
+                    {filter}
+                  </button>
+                );
+              })}
             </div>
 
             {showRight && (
@@ -212,12 +378,10 @@ export const Sidebar = () => {
                   autoFocus
                   type="text"
                   placeholder="Tìm kiếm trong Thư viện"
-                  value={sidebarSearch}
-                  onChange={(e) => setSidebarSearch(e.target.value)}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="bg-transparent border-none outline-none text-white text-sm ml-2 w-full placeholder-spotify-sub"
-                  onBlur={() => {
-                    if (!sidebarSearch.trim()) setIsSearchExpanded(false);
-                  }}
+                  onBlur={() => !searchQuery && setIsSearchExpanded(false)}
                 />
               </div>
             ) : (
@@ -249,175 +413,183 @@ export const Sidebar = () => {
         {/* List Items */}
         <div className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-2">
           {isAuthenticated ? (
-            isPlaylistsLoading ? (
-              <div className="flex flex-col gap-2 p-2">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 animate-pulse">
-                    <div className="w-12 h-12 rounded-lg bg-[#242424] flex-shrink-0" />
-                    <div className="flex flex-col gap-1.5 flex-1">
-                      <div className="w-3/4 h-3.5 bg-[#242424] rounded" />
-                      <div className="w-1/2 h-2.5 bg-[#242424] rounded" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : visiblePlaylists.length === 0 ? (
-              <div className="bg-[#242424] rounded-lg p-5 mt-2 flex flex-col gap-4 text-white">
-                <div className="flex flex-col gap-1">
-                  <span className="font-bold text-base">Tạo danh sách phát đầu tiên của bạn</span>
-                  <span className="text-sm font-medium text-neutral-400">Rất dễ! Bắt đầu lưu lại nhạc bạn yêu thích</span>
-                </div>
-                <div className="mt-1">
-                  <Button
-                    variant="white"
-                    size="sm"
-                    className="font-bold text-black rounded-full px-4 w-max"
-                    onClick={() => handleProtectedAction("tạo danh sách phát mới", openCreate)}
-                  >
-                    Tạo danh sách phát
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Mục ghim: Bài hát đã thích */}
+            <div className="flex flex-col gap-1">
+              {/* 1. Mục cố định ghim mặc định trên đầu: Bài hát đã thích */}
+              {shouldShowLikedSongs && (
                 <div
-                  onClick={() => navigate('/liked-songs')}
-                  className={`flex items-center justify-between gap-3 p-2 mb-1 rounded-lg cursor-pointer group transition-colors relative ${
-                    isLikedActive ? 'bg-[#282828]' : 'hover:bg-[#1a1a1a]'
+                  onClick={() => navigate("/collection/tracks")}
+                  className={`flex items-center gap-3 p-2 rounded-md cursor-pointer group transition-all duration-200 select-none ${
+                    isLikedActive ? "bg-[#282828]" : "hover:bg-[#1a1a1a]"
                   }`}
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-md bg-gradient-to-br from-[#7a1829] to-[#fa2d48] flex items-center justify-center shadow-sm">
-                      <Heart size={20} className="fill-white text-white" />
+                  {/* Thumbnail vuông gradient xanh tím với trái tim trắng */}
+                  <div
+                    className="relative group/cover flex-shrink-0"
+                    onClick={handlePlayLikedSongs}
+                  >
+                    <div className="w-12 h-12 flex items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-[#450af5] via-[#6136f6] to-[#8e8ee5] shadow-md group-hover:scale-105 transition-transform">
+                      <Heart size={20} className="text-white fill-white" />
                     </div>
-                    <div className="flex flex-col min-w-0">
-                      <span
-                        className={`text-sm font-semibold truncate ${
-                          isLikedActive ? 'text-[#fa2d48]' : 'text-white'
-                        }`}
-                      >
-                        Bài hát đã thích
-                      </span>
-                      <span className="text-xs text-spotify-sub truncate mt-0.5">
-                        Danh sách phát • {likedSongCount} bài hát
+
+                    {/* Lớp phủ nút Play khi hover vào ảnh */}
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/cover:opacity-100 transition-opacity rounded-md">
+                      <Play
+                        size={18}
+                        fill="white"
+                        className="text-white ml-0.5 drop-shadow-md"
+                      />
+                    </div>
+
+                    {/* Tippy Tooltip khi hover vào ảnh */}
+                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-[#282828] text-white text-xs font-semibold px-2.5 py-1.5 rounded-md opacity-0 delay-0 group-hover/cover:opacity-100 group-hover/cover:delay-[1500ms] transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-white/10">
+                      Phát Bài hát đã thích
+                    </div>
+                  </div>
+
+                  {/* Text Content */}
+                  <div className="flex flex-col flex-1 min-w-0 justify-center">
+                    <span
+                      className={`text-sm font-semibold truncate transition-colors ${
+                        isLikedActive
+                          ? "text-[#fa2d48]"
+                          : "text-white group-hover:text-white"
+                      }`}
+                    >
+                      Bài hát đã thích
+                    </span>
+                    <div className="flex items-center gap-1.5 text-xs text-spotify-sub mt-0.5 overflow-hidden">
+                      <Pin
+                        size={12}
+                        className="text-[#fa2d48] fill-[#fa2d48] flex-shrink-0 rotate-45"
+                      />
+                      <span className="truncate">
+                        Danh sách phát • {favoriteSongs.length} bài hát
                       </span>
                     </div>
                   </div>
                 </div>
+              )}
 
-                {visiblePlaylists.map((pl) => {
-                const isActive = location.pathname === `/playlist/${pl.id}`;
+              {/* 2. Danh sách toàn bộ các Nghệ sĩ, Album & Playlist bên dưới */}
+              {libraryItems.map((item) => {
+                const isArtist = item.type === "artist";
+                const isAlbum = item.type === "album";
+                const isPlaylist = item.type === "playlist";
+                const itemPath = isArtist
+                  ? `/artist/${item.id}`
+                  : isAlbum
+                  ? `/album/${item.id}`
+                  : `/playlist/${item.id}`;
+                const isActive = location.pathname === itemPath;
 
                 return (
                   <div
-                    key={pl.id}
-                    onClick={() => navigate(`/playlist/${pl.id}`)}
-                    className={`flex items-center justify-between gap-3 p-2 rounded-lg cursor-pointer group transition-colors relative ${
-                      isActive ? 'bg-[#282828]' : 'hover:bg-[#1a1a1a]'
+                    key={`${item.type}-${item.id}`}
+                    onClick={() => {
+                      if (isArtist) {
+                        navigate(itemPath);
+                      } else if (isAlbum) {
+                        navigate(itemPath, { state: { album: item.raw } });
+                      } else if (isPlaylist) {
+                        navigate(itemPath, { state: { playlist: item.raw } });
+                      }
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-md cursor-pointer group transition-all duration-200 select-none ${
+                      isActive ? "bg-[#282828]" : "hover:bg-[#1a1a1a]"
                     }`}
                   >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {/* Thumbnail */}
-                      <div className="flex-shrink-0 w-12 h-12 rounded-md bg-[#282828] border border-white/5 flex items-center justify-center overflow-hidden">
-                        {pl.coverImage ? (
-                          <img
-                            src={pl.coverImage}
-                            alt={pl.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <Music size={20} className="text-[#fa2d48]" />
-                        )}
+                    {/* Ảnh đại diện: Nghệ sĩ hình TRÒN, Album & Playlist hình VUÔNG */}
+                    <div
+                      className="relative group/cover flex-shrink-0"
+                      onClick={(e) => {
+                        if (isArtist) {
+                          handlePlayArtist(e, item.id);
+                        } else if (isAlbum) {
+                          handlePlayAlbum(e, item.id);
+                        } else if (isPlaylist) {
+                          handlePlayPlaylist(e, item.id);
+                        }
+                      }}
+                    >
+                      <div
+                        className={`w-12 h-12 overflow-hidden flex items-center justify-center bg-neutral-800 shadow-md ${
+                          isArtist ? "rounded-full" : "rounded-md"
+                        }`}
+                      >
+                        <CoverImage
+                          src={item.image}
+                          alt={item.title}
+                          isArtist={isArtist}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
 
-                      {/* Text Content */}
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`text-sm font-semibold truncate ${
-                            isActive ? 'text-[#fa2d48]' : 'text-white'
-                          }`}
-                        >
-                          {pl.name}
-                        </span>
-                        <span className="text-xs text-spotify-sub truncate mt-0.5">
-                          Danh sách phát • {pl.ownerName || 'Bạn'}
-                        </span>
+                      {/* Nút Play hiển thị đè lên ảnh khi hover */}
+                      <div
+                        className={`absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/cover:opacity-100 transition-opacity duration-200 ${
+                          isArtist ? "rounded-full" : "rounded-md"
+                        }`}
+                      >
+                        <Play
+                          size={18}
+                          fill="white"
+                          className="text-white ml-0.5 drop-shadow-md"
+                        />
+                      </div>
+
+                      {/* Tippy / Tooltip hiển thị: "Phát [tên nghệ sĩ/album/playlist]" khi hover vào ảnh */}
+                      <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-[#282828] text-white text-xs font-semibold px-2.5 py-1.5 rounded-md opacity-0 delay-0 group-hover/cover:opacity-100 group-hover/cover:delay-[1500ms] transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-white/10">
+                        Phát {item.title || (isAlbum ? (item.raw?.albumTitle || "Album") : "Danh sách phát")}
                       </div>
                     </div>
 
-                    {/* Context menu button */}
-                    <div className="relative flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveMenuId(activeMenuId === pl.id ? null : pl.id);
-                        }}
-                        className="p-1.5 text-neutral-400 hover:text-white rounded-full hover:bg-white/10 transition opacity-0 group-hover:opacity-100"
+                    {/* Thông tin Text */}
+                    <div className="flex flex-col flex-1 min-w-0 justify-center">
+                      <span
+                        className={`text-sm font-medium truncate transition-colors ${
+                          isActive
+                            ? "text-[#fa2d48] font-bold"
+                            : "text-white group-hover:text-white"
+                        }`}
                       >
-                        <MoreVertical size={16} />
-                      </button>
-
-                      {activeMenuId === pl.id && (
-                        <div
-                          className="absolute right-0 top-full mt-1 w-40 bg-[#282828] border border-white/10 rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              openAddSong(pl);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-neutral-200 hover:text-white hover:bg-white/10 text-left transition"
-                          >
-                            <ListPlus size={14} />
-                            Thêm bài hát
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              openEdit(pl);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-neutral-200 hover:text-white hover:bg-white/10 text-left transition"
-                          >
-                            <Edit3 size={14} />
-                            Đổi tên / Sửa
-                          </button>
-                          <div className="h-px bg-white/10 my-1" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              openDelete(pl);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 text-left transition"
-                          >
-                            <Trash2 size={14} />
-                            Xóa playlist
-                          </button>
-                        </div>
-                      )}
+                        {item.title}
+                      </span>
+                      <span className="text-xs text-spotify-sub truncate mt-0.5">
+                        {item.subtitle}
+                      </span>
                     </div>
                   </div>
                 );
               })}
-              </>
-            )
+
+              {/* Trạng thái trống khi chưa có nghệ sĩ/album nào và không hiện bài hát đã thích */}
+              {libraryItems.length === 0 && !shouldShowLikedSongs && (
+                <div className="py-8 text-center text-spotify-sub text-xs">
+                  Không tìm thấy mục nào phù hợp trong thư viện.
+                </div>
+              )}
+            </div>
           ) : (
+            // Trạng thái khi chưa đăng nhập
             <div className="bg-[#242424] rounded-lg p-5 mt-2 flex flex-col gap-4 text-white">
               <div className="flex flex-col gap-1">
-                <span className="font-bold text-base">Tạo danh sách phát đầu tiên của bạn</span>
-                <span className="text-sm font-medium">Rất dễ! Chúng tôi sẽ giúp bạn</span>
+                <span className="font-bold text-base">
+                  Tạo danh sách phát đầu tiên của bạn
+                </span>
+                <span className="text-sm font-medium">
+                  Rất dễ! Chúng tôi sẽ giúp bạn
+                </span>
               </div>
               <div className="mt-1">
                 <Button
                   variant="white"
                   size="sm"
                   className="font-bold text-black rounded-full px-4 w-max"
-                  onClick={() => handleProtectedAction("tạo danh sách phát mới", openCreate)}
+                  onClick={() => {
+                    if (handleProtectedAction("tạo danh sách phát mới")) {
+                      setIsCreateModalOpen(true);
+                    }
+                  }}
                 >
                   Tạo danh sách phát
                 </Button>
@@ -426,6 +598,12 @@ export const Sidebar = () => {
           )}
         </div>
       </div>
+
+      {/* Modal Tạo Playlist */}
+      <CreatePlaylistModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
 
       {/* Resizer Handle */}
       <div
@@ -439,7 +617,7 @@ export const Sidebar = () => {
           className={`h-full w-[2px] transition-colors ${
             isResizing ? "bg-white/60" : "hover:bg-white/30"
           }`}
-        />
+        ></div>
       </div>
     </aside>
   );

@@ -1,18 +1,18 @@
 import React, { useMemo } from "react";
-import { useParams, useLocation, useNavigate } from "react-router";
+import { useParams, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Play,
   Pause,
   Shuffle,
+  Heart,
   MoreHorizontal,
   Clock,
-  Heart,
 } from "lucide-react";
 
 import { getAlbumSongs, getAlbumById } from "../api/catalog/public";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { useFavoriteStore } from "../store/useFavoriteStore";
+import { useFavorites } from "../hooks/useFavorites";
 import { Button } from "../components/ui/Button";
 import { SongRow } from "../components/ui/SongRow";
 import { CoverImage } from "../components/ui/CoverImage";
@@ -21,27 +21,22 @@ import { SkeletonRow } from "../components/ui/Skeleton";
 export const AlbumPage = () => {
   const { id: albumId } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
 
-  const isAlbumLiked = useFavoriteStore((state) => state.isAlbumLiked);
-  const toggleLikeAlbum = useFavoriteStore((state) => state.toggleLikeAlbum);
-
-  // Lấy metadata album được truyền qua React Router state (nếu có)
+  // Lấy metadata album qua state hoặc query API Catalog chi tiết
   const stateAlbum = location.state?.album;
-
-  // Fetch chi tiết album nếu không có sẵn trong state
   const { data: albumDetailData } = useQuery({
     queryKey: ["albumDetail", albumId],
     queryFn: () => getAlbumById(albumId),
-    enabled: !!albumId && !stateAlbum,
+    enabled: !!albumId,
+    initialData: stateAlbum ? { data: stateAlbum } : undefined,
   });
+  const album = albumDetailData?.data || stateAlbum;
 
-  const album = stateAlbum || albumDetailData?.data;
-
-  const isLiked = isAlbumLiked(albumId);
-
-  const { currentSong, isPlaying, setIsPlaying, setCurrentSong } =
+  const { currentSong, isPlaying, setIsPlaying, playSongWithContext } =
     usePlayerStore();
+  const { isFavoriteAlbum, toggleFavoriteAlbum } = useFavorites();
+
+  const isAlbumLiked = isFavoriteAlbum(albumId || album?.id);
 
   // ─── Fetch danh sách bài hát ─────────────────────────────────────────────
   const { data: songsData, isLoading } = useQuery({
@@ -50,7 +45,7 @@ export const AlbumPage = () => {
     enabled: !!albumId,
   });
 
-  const songs = songsData?.data?.content || [];
+  const songs = useMemo(() => songsData?.data?.content || [], [songsData]);
 
   // ─── Tính tổng thời lượng album ──────────────────────────────────────────
   const totalDuration = useMemo(() => {
@@ -84,15 +79,13 @@ export const AlbumPage = () => {
       setIsPlaying(false);
       return;
     }
-    setCurrentSong(songs[0]);
-    setIsPlaying(true);
+    playSongWithContext(songs[0], songs, 0);
   };
 
   const handleShufflePlay = () => {
     if (songs.length === 0) return;
     const randomIndex = Math.floor(Math.random() * songs.length);
-    setCurrentSong(songs[randomIndex]);
-    setIsPlaying(true);
+    playSongWithContext(songs[randomIndex], songs, randomIndex);
   };
 
   // Màu gradient ngẫu nhiên từ ảnh bìa — dùng fallback nếu không có
@@ -168,23 +161,24 @@ export const AlbumPage = () => {
           <Shuffle size={22} />
         </Button>
 
-        {/* Nút Yêu thích Album */}
+        {/* Nút Thả tim Album */}
         <Button
           variant="ghost"
           size="md"
           iconOnly
-          tooltip={isLiked ? "Xóa khỏi album yêu thích" : "Lưu vào album yêu thích"}
+          tooltip={isAlbumLiked ? "Xóa khỏi Thư viện" : "Lưu vào Thư viện"}
           tooltipPosition="top"
-          onClick={() => {
-            if (album) {
-              toggleLikeAlbum(album, { onLogin: () => navigate('/login') });
-            }
-          }}
-          className={`transition-all active:scale-125 ${
-            isLiked ? "text-spotify-primary hover:text-spotify-primary-hover" : "text-spotify-sub hover:text-white"
+          onClick={() => toggleFavoriteAlbum(album ? { ...album, albumId: albumId || album.id, id: albumId || album.id } : { id: albumId, albumId })}
+          className={`hover:bg-transparent transition-all ${
+            isAlbumLiked
+              ? "!text-[#fa2d48] hover:!text-[#ff4b63]"
+              : "text-spotify-sub hover:text-white"
           }`}
         >
-          <Heart size={22} className={isLiked ? "fill-spotify-primary text-spotify-primary" : ""} />
+          <Heart
+            size={22}
+            className={isAlbumLiked ? "fill-[#fa2d48] text-[#fa2d48]" : "currentColor"}
+          />
         </Button>
 
         {/* Nút thêm */}
@@ -224,7 +218,7 @@ export const AlbumPage = () => {
                 index={idx + 1}
                 song={song}
                 isPlaying={isPlaying && currentSong?.id === song.id}
-                onPlayClick={() => setCurrentSong(song)}
+                onPlayClick={() => playSongWithContext(song, songs, idx)}
               />
             ))}
           </div>
