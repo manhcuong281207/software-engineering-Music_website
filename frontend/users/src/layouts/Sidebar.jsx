@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Music,
+  Heart,
   MoreVertical,
   Edit3,
   Trash2,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { useAuthStore } from "../store/useAuthStore";
+import { useFavoriteStore } from "../store/useFavoriteStore";
 import { usePlaylistModalStore } from "../store/usePlaylistModalStore";
 import { getUserPlaylists } from "../api/users/playlist";
 import { showLoginToast } from "../utils/toastUtils";
@@ -33,6 +35,9 @@ export const Sidebar = () => {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [activeMenuId, setActiveMenuId] = useState(null);
+
+  const likedSongCount = useFavoriteStore((state) => state.likedSongCount);
+  const isLikedActive = location.pathname === '/liked-songs' || location.pathname === '/collection/tracks';
 
   // Fetch playlist thật của user
   const { data: playlists = [], isLoading: isPlaylistsLoading } = useQuery({
@@ -274,7 +279,34 @@ export const Sidebar = () => {
                 </div>
               </div>
             ) : (
-              visiblePlaylists.map((pl) => {
+              <>
+                {/* Mục ghim: Bài hát đã thích */}
+                <div
+                  onClick={() => navigate('/liked-songs')}
+                  className={`flex items-center justify-between gap-3 p-2 mb-1 rounded-lg cursor-pointer group transition-colors relative ${
+                    isLikedActive ? 'bg-[#282828]' : 'hover:bg-[#1a1a1a]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-md bg-gradient-to-br from-[#7a1829] to-[#fa2d48] flex items-center justify-center shadow-sm">
+                      <Heart size={20} className="fill-white text-white" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span
+                        className={`text-sm font-semibold truncate ${
+                          isLikedActive ? 'text-[#fa2d48]' : 'text-white'
+                        }`}
+                      >
+                        Bài hát đã thích
+                      </span>
+                      <span className="text-xs text-spotify-sub truncate mt-0.5">
+                        Danh sách phát • {likedSongCount} bài hát
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {visiblePlaylists.map((pl) => {
                 const isActive = location.pathname === `/playlist/${pl.id}`;
 
                 return (
@@ -371,7 +403,8 @@ export const Sidebar = () => {
                     </div>
                   </div>
                 );
-              })
+              })}
+              </>
             )
           ) : (
             <div className="bg-[#242424] rounded-lg p-5 mt-2 flex flex-col gap-4 text-white">

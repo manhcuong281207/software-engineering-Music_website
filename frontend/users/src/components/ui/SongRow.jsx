@@ -1,33 +1,44 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Play, Heart } from "lucide-react";
 import { CoverImage } from "./CoverImage";
-import { useAuthStore } from "../../store/useAuthStore";
-import { showLoginToast } from "../../utils/toastUtils";
+import { useFavoriteStore } from "../../store/useFavoriteStore";
 
 /**
- * Component hiển thị 1 dòng bài hát trong danh sách ngang (Album Detail, Artist Profile).
+ * Component hiển thị 1 dòng bài hát trong danh sách ngang (Album Detail, Artist Profile, Liked Songs).
  */
-export const SongRow = ({ index, song, onPlayClick, isPlaying }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+export const SongRow = ({ index, song, onPlayClick, isPlaying, extraAction }) => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const isSongLiked = useFavoriteStore((state) => state.isSongLiked);
+  const toggleLikeSong = useFavoriteStore((state) => state.toggleLikeSong);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Xử lý hiển thị thời lượng (ms -> mm:ss)
-  const formatDuration = (ms) => {
-    if (!ms) return "--:--";
-    const totalSeconds = Math.floor(ms / 1000);
+  const songId = song?.id || song?.songId;
+  const isLiked = isSongLiked(songId);
+
+  // Xử lý hiển thị thời lượng (ms -> mm:ss hoặc seconds -> mm:ss)
+  const formatDuration = (ms, seconds) => {
+    let totalSeconds = 0;
+    if (typeof seconds === "number" && seconds > 0) {
+      totalSeconds = seconds;
+    } else if (typeof ms === "number" && ms > 0) {
+      totalSeconds = Math.floor(ms / 1000);
+    } else {
+      return "--:--";
+    }
     const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    const secs = totalSeconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
 
   const handleLike = (e) => {
     e.stopPropagation(); // Ngăn sự kiện click lan ra ngoài (gây play nhạc)
-    if (!isAuthenticated) {
-      showLoginToast("thêm bài hát vào danh sách yêu thích");
-      return;
-    }
-    // TODO: Gọi API thả tim
-    console.log("Liked song:", song.id);
+    toggleLikeSong(song, {
+      onLogin: () => navigate("/login"),
+      queryClient,
+    });
   };
 
   return (
@@ -77,19 +88,39 @@ export const SongRow = ({ index, song, onPlayClick, isPlaying }) => {
         </span>
       </div>
 
-      {/* Hành động (Like) - Chỉ hiện khi hover */}
-      <div className="w-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Extra action (ví dụ: ngày thêm vào playlist/yêu thích) nếu có */}
+      {extraAction && (
+        <div className="hidden md:flex items-center text-xs text-spotify-sub min-w-[120px]">
+          {extraAction}
+        </div>
+      )}
+
+      {/* Hành động (Like) - Luôn hiện nếu đã thích, hoặc hiện khi hover */}
+      <div
+        className={`w-10 flex items-center justify-center transition-all ${
+          isLiked ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+      >
         <button
-          className="text-spotify-sub hover:text-white"
+          type="button"
+          className={`p-1.5 rounded-full hover:scale-110 active:scale-95 transition-all ${
+            isLiked
+              ? "text-spotify-primary hover:text-spotify-primary-hover"
+              : "text-spotify-sub hover:text-white"
+          }`}
           onClick={handleLike}
+          title={isLiked ? "Xóa khỏi Bài hát đã thích" : "Lưu vào Bài hát đã thích"}
         >
-          <Heart size={18} />
+          <Heart
+            size={18}
+            className={isLiked ? "fill-spotify-primary text-spotify-primary" : ""}
+          />
         </button>
       </div>
 
       {/* Thời lượng */}
       <div className="w-12 text-sm text-spotify-sub text-right">
-        {formatDuration(song.durationMs || song.durationSeconds * 1000)}
+        {formatDuration(song.durationMs, song.durationSeconds)}
       </div>
     </div>
   );

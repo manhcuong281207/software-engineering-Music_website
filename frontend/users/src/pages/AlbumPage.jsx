@@ -7,11 +7,12 @@ import {
   Shuffle,
   MoreHorizontal,
   Clock,
-  ArrowLeft,
+  Heart,
 } from "lucide-react";
 
-import { getAlbumSongs } from "../api/catalog/public";
+import { getAlbumSongs, getAlbumById } from "../api/catalog/public";
 import { usePlayerStore } from "../store/usePlayerStore";
+import { useFavoriteStore } from "../store/useFavoriteStore";
 import { Button } from "../components/ui/Button";
 import { SongRow } from "../components/ui/SongRow";
 import { CoverImage } from "../components/ui/CoverImage";
@@ -22,8 +23,22 @@ export const AlbumPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Lấy metadata album được truyền qua React Router state
-  const album = location.state?.album;
+  const isAlbumLiked = useFavoriteStore((state) => state.isAlbumLiked);
+  const toggleLikeAlbum = useFavoriteStore((state) => state.toggleLikeAlbum);
+
+  // Lấy metadata album được truyền qua React Router state (nếu có)
+  const stateAlbum = location.state?.album;
+
+  // Fetch chi tiết album nếu không có sẵn trong state
+  const { data: albumDetailData } = useQuery({
+    queryKey: ["albumDetail", albumId],
+    queryFn: () => getAlbumById(albumId),
+    enabled: !!albumId && !stateAlbum,
+  });
+
+  const album = stateAlbum || albumDetailData?.data;
+
+  const isLiked = isAlbumLiked(albumId);
 
   const { currentSong, isPlaying, setIsPlaying, setCurrentSong } =
     usePlayerStore();
@@ -151,6 +166,25 @@ export const AlbumPage = () => {
         {/* Nút Trộn bài */}
         <Button variant="ghost" size="md" iconOnly tooltip="Trộn bài" tooltipPosition="top" onClick={handleShufflePlay}>
           <Shuffle size={22} />
+        </Button>
+
+        {/* Nút Yêu thích Album */}
+        <Button
+          variant="ghost"
+          size="md"
+          iconOnly
+          tooltip={isLiked ? "Xóa khỏi album yêu thích" : "Lưu vào album yêu thích"}
+          tooltipPosition="top"
+          onClick={() => {
+            if (album) {
+              toggleLikeAlbum(album, { onLogin: () => navigate('/login') });
+            }
+          }}
+          className={`transition-all active:scale-125 ${
+            isLiked ? "text-spotify-primary hover:text-spotify-primary-hover" : "text-spotify-sub hover:text-white"
+          }`}
+        >
+          <Heart size={22} className={isLiked ? "fill-spotify-primary text-spotify-primary" : ""} />
         </Button>
 
         {/* Nút thêm */}
