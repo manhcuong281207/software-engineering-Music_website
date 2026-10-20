@@ -9,6 +9,9 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AlbumPage } from './pages/AlbumPage';
 import { ArtistPage } from './pages/ArtistPage';
+import { PlaylistDetailPage } from './pages/PlaylistDetailPage';
+import { LibraryPage } from './pages/LibraryPage';
+import { PlaylistModals } from './components/modals/PlaylistModals';
 
 // Khởi tạo React Query Client
 const queryClient = new QueryClient({
@@ -27,13 +30,17 @@ function App() {
         {/* Toaster dùng để hiển thị thông báo góc trên bên phải */}
         <Toaster theme="dark" position="top-right" richColors />
 
+        {/* Cụm Modals toàn cục cho Playlist (Tạo, Đổi tên, Xóa, Thêm bài hát) */}
+        <PlaylistModals />
+
         <Routes>
           {/* Group 1: Các trang được bọc trong MainLayout (Có Sidebar & Player) */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/album/:id" element={<AlbumPage />} />
             <Route path="/artist/:id" element={<ArtistPage />} />
-            {/* Các trang sau này như /search, /library sẽ thêm vào đây */}
+            <Route path="/playlist/:id" element={<PlaylistDetailPage />} />
+            <Route path="/library" element={<LibraryPage />} />
           </Route>
 
           {/* Group 2: Các trang độc lập, toàn màn hình */}
