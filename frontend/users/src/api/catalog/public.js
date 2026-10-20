@@ -55,3 +55,12 @@ export const getAlbumSongs = async (albumId, params = {}) => {
   const response = await api.get(`/catalog/public/albums/${albumId}/songs`, { params });
   return response.data;
 };
+
+/**
+ * Lấy chi tiết bài hát theo id
+ * @param {String} id 
+ */
+export const getSongById = async (id) => {
+  const response = await api.get(`/catalog/public/songs/${id}`);
+  return response.data;
+};
