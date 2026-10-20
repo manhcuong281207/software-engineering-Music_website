@@ -12,16 +12,15 @@ import {
   Heart,
 } from "lucide-react";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { useAuthStore } from "../store/useAuthStore";
+import { useFavoriteStore } from "../store/useFavoriteStore";
 import { Button } from "../components/ui/Button";
-import { toast } from "sonner";
-import { showLoginToast } from "../utils/toastUtils";
 
 export const BottomPlayer = () => {
   const navigate = useNavigate();
   const { currentSong, isPlaying, setIsPlaying, playNext, playPrevious } =
     usePlayerStore();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isSongLiked = useFavoriteStore((state) => state.isSongLiked);
+  const toggleLikeSong = useFavoriteStore((state) => state.toggleLikeSong);
 
   const audioRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -93,13 +92,15 @@ export const BottomPlayer = () => {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
+  const isLiked = currentSong
+    ? isSongLiked(currentSong.id || currentSong.songId)
+    : false;
+
   const handleLike = () => {
-    if (!isAuthenticated) {
-      showLoginToast('thêm bài hát vào danh sách yêu thích', () => navigate('/login'));
-      return;
-    }
-    // TODO: Gọi API thêm bài hát vào yêu thích
-    toast.success('Đã thêm vào bài hát yêu thích!');
+    if (!currentSong) return;
+    toggleLikeSong(currentSong, {
+      onLogin: () => navigate('/login'),
+    });
   };
 
   if (!currentSong) return null;
@@ -138,12 +139,14 @@ export const BottomPlayer = () => {
           variant="ghost"
           size="sm"
           iconOnly
-          className="ml-2 hover:bg-transparent text-spotify-sub hover:text-white"
-          tooltip="Lưu vào Thư viện"
+          className={`ml-2 hover:bg-transparent transition-all active:scale-125 ${
+            isLiked ? "text-spotify-primary hover:text-spotify-primary-hover" : "text-spotify-sub hover:text-white"
+          }`}
+          tooltip={isLiked ? "Xóa khỏi Bài hát đã thích" : "Lưu vào Bài hát đã thích"}
           tooltipPosition="top"
           onClick={handleLike}
         >
-          <Heart size={18} />
+          <Heart size={18} className={isLiked ? "fill-spotify-primary text-spotify-primary" : ""} />
         </Button>
       </div>
 

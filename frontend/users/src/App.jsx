@@ -4,13 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 
 import { MainLayout } from './layouts/MainLayout';
-import { HomePage } from './pages/MockHomePage';
+import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AlbumPage } from './pages/AlbumPage';
 import { ArtistPage } from './pages/ArtistPage';
 import { PlaylistDetailPage } from './pages/PlaylistDetailPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { LikedSongsPage } from './pages/LikedSongsPage';
 import { PlaylistModals } from './components/modals/PlaylistModals';
 
 // Khởi tạo React Query Client
@@ -37,6 +38,8 @@ function App() {
           {/* Group 1: Các trang được bọc trong MainLayout (Có Sidebar & Player) */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/liked-songs" element={<LikedSongsPage />} />
+            <Route path="/collection/tracks" element={<LikedSongsPage />} />
             <Route path="/album/:id" element={<AlbumPage />} />
             <Route path="/artist/:id" element={<ArtistPage />} />
             <Route path="/playlist/:id" element={<PlaylistDetailPage />} />

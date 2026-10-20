@@ -11,12 +11,17 @@ import {
   getPublicAlbums,
   getArtistSongs,
   getAlbumSongs,
+  getSongById,
 } from "../api/catalog/public";
 import { getPublicArtists } from "../api/artists/public";
+import { getFavoriteSongs } from "../api/users/favorite";
+import { getFollowedArtists } from "../api/users/follow";
+import { Heart, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 
 export const HomePage = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const { setCurrentSong, setIsPlaying } = usePlayerStore();
+  const { setCurrentSong, setIsPlaying, setQueue } = usePlayerStore();
   const navigate = useNavigate();
 
   const handlePlayArtistCard = async (artistId) => {
@@ -76,10 +81,54 @@ export const HomePage = () => {
     queryFn: () => getPublicAlbums({ size: 10, sort: "likeCount,desc" }),
   });
 
+  // Fetch Favorite Songs (User)
+  const { data: favoriteSongsData, isLoading: isLoadingFavoriteSongs } = useQuery({
+    queryKey: ["userFavorites", "home"],
+    queryFn: () => getFavoriteSongs({ size: 10 }),
+    enabled: isAuthenticated,
+  });
+
+  // Fetch Followed Artists (User)
+  const { data: followedArtistsData, isLoading: isLoadingFollowedArtists } = useQuery({
+    queryKey: ["userFollowedArtists", "home"],
+    queryFn: () => getFollowedArtists({ size: 10 }),
+    enabled: isAuthenticated,
+  });
+
   // Trích xuất dữ liệu từ response (chuẩn hóa API backend trả về format: data.data.content)
   const songs = songsData?.data?.content || [];
   const artists = artistsData?.data?.content || [];
   const albums = albumsData?.data?.content || [];
+  const favoriteSongs = favoriteSongsData?.content || [];
+  const followedArtists = followedArtistsData?.content || [];
+
+  const handlePlayFavoriteSong = async (song) => {
+    try {
+      const songId = song.id || song.songId;
+      let fullSong = song;
+      if (!fullSong.audioUrl) {
+        const detailRes = await getSongById(songId);
+        if (detailRes?.data) {
+          fullSong = {
+            ...song,
+            ...detailRes.data,
+            id: detailRes.data.id || songId,
+            songId: detailRes.data.id || songId,
+          };
+        }
+      }
+      if (!fullSong.audioUrl) {
+        toast.error("Không tìm thấy nguồn âm thanh cho bài hát này.");
+        return;
+      }
+      setQueue(favoriteSongs);
+      setCurrentSong(fullSong);
+      setIsPlaying(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể tải bài hát.");
+    }
+  };
 
   // Tạo khung Skeleton khi đang tải (sử dụng component chuẩn mới)
   const renderSkeletons = (count = 5, isArtist = false) => {
@@ -98,22 +147,65 @@ export const HomePage = () => {
       {/* 1. KHỐI PRIVATE (Chỉ hiện khi đăng nhập) */}
       {isAuthenticated && (
         <>
-          <SectionCarousel title="Nghe gần đây">
-            <div className="col-span-full py-8 text-center text-spotify-sub flex flex-col items-center justify-center gap-2 w-full">
-              <span>Tính năng "Nghe gần đây" đang được phát triển.</span>
-            </div>
+          {/* Section Bài hát yêu thích */}
+          <SectionCarousel title="Bài hát bạn yêu thích">
+            {isLoadingFavoriteSongs ? (
+              renderSkeletons()
+            ) : favoriteSongs.length > 0 ? (
+              favoriteSongs.map((song) => (
+                <div
+                  key={song.id || song.songId}
+                  className="w-[140px] sm:w-[170px] md:w-[190px] lg:w-[210px] flex-shrink-0"
+                >
+                  <SongCard
+                    id={song.id || song.songId}
+                    type="song"
+                    title={song.title}
+                    subtitle={song.artistName}
+                    artistName={song.artistName}
+                    imageUrl={song.coverImage}
+                    onClick={() => handlePlayFavoriteSong(song)}
+                    onPlayClick={() => handlePlayFavoriteSong(song)}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-8 text-center text-spotify-sub flex flex-col items-center justify-center gap-2 w-full bg-white/[0.02] border border-dashed border-white/10 rounded-xl p-6">
+                <Heart size={28} className="text-[#fa2d48] opacity-80" />
+                <span className="text-sm text-white font-medium">Chưa có bài hát nào trong danh sách yêu thích</span>
+                <span className="text-xs text-spotify-sub">Hãy thả tim những bài hát bên dưới để nghe lại bất cứ lúc nào!</span>
+              </div>
+            )}
           </SectionCarousel>
-          <SectionCarousel title="Bài hát yêu thích">
-            <div className="col-span-full py-8 text-center text-spotify-sub flex flex-col items-center justify-center gap-2 w-full">
-              <span>Tính năng "Bài hát yêu thích" đang được phát triển.</span>
-            </div>
-          </SectionCarousel>
-          <SectionCarousel title="Nghệ sĩ bạn yêu thích">
-            <div className="col-span-full py-8 text-center text-spotify-sub flex flex-col items-center justify-center gap-2 w-full">
-              <span>
-                Tính năng "Nghệ sĩ bạn yêu thích" đang được phát triển.
-              </span>
-            </div>
+
+          {/* Section Nghệ sĩ theo dõi */}
+          <SectionCarousel title="Nghệ sĩ bạn theo dõi">
+            {isLoadingFollowedArtists ? (
+              renderSkeletons(5, true)
+            ) : followedArtists.length > 0 ? (
+              followedArtists.map((artist) => (
+                <div
+                  key={artist.id || artist.artistId}
+                  className="w-[140px] sm:w-[170px] md:w-[190px] lg:w-[210px] flex-shrink-0"
+                >
+                  <SongCard
+                    type="artist"
+                    id={artist.id || artist.artistId}
+                    title={artist.stageName}
+                    subtitle="Nghệ sĩ"
+                    imageUrl={artist.avatarUrl}
+                    onClick={() => navigate(`/artist/${artist.id || artist.artistId}`)}
+                    onPlayClick={() => handlePlayArtistCard(artist.id || artist.artistId)}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-8 text-center text-spotify-sub flex flex-col items-center justify-center gap-2 w-full bg-white/[0.02] border border-dashed border-white/10 rounded-xl p-6">
+                <UserPlus size={28} className="text-[#fa2d48] opacity-80" />
+                <span className="text-sm text-white font-medium">Bạn chưa theo dõi nghệ sĩ nào</span>
+                <span className="text-xs text-spotify-sub">Khám phá các nghệ sĩ bên dưới và bấm theo dõi để cập nhật nhạc mới!</span>
+              </div>
+            )}
           </SectionCarousel>
         </>
       )}

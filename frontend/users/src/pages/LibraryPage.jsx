@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Search, Library, Music, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Search, Library, Music, AlertCircle, RefreshCw, Heart } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { PlaylistCard, SkeletonPlaylistCard } from '../components/music/PlaylistCard';
 import { getUserPlaylists } from '../api/users/playlist';
 import { useAuthStore } from '../store/useAuthStore';
+import { useFavoriteStore } from '../store/useFavoriteStore';
 import { usePlaylistModalStore } from '../store/usePlaylistModalStore';
 import { showLoginToast } from '../utils/toastUtils';
 
 export const LibraryPage = () => {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const likedSongCount = useFavoriteStore((state) => state.likedSongCount);
   const { openCreate } = usePlaylistModalStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -188,6 +190,25 @@ export const LibraryPage = () => {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {/* Card Bài hát đã thích hiển thị đầu danh sách khi ở tab Tất cả và không có search */}
+          {!searchQuery.trim() && filterType === 'all' && (
+            <div
+              onClick={() => navigate('/liked-songs')}
+              className="group relative flex flex-col justify-end p-5 rounded-xl bg-gradient-to-br from-[#7a1829] via-[#fa2d48] to-[#991b1b] cursor-pointer shadow-lg hover:shadow-[#fa2d48]/25 hover:scale-[1.02] active:scale-[0.98] transition-all min-h-[160px] overflow-hidden sm:col-span-2"
+            >
+              <div className="absolute top-4 right-4 p-3 rounded-full bg-black/30 backdrop-blur-sm text-white group-hover:scale-110 transition-transform">
+                <Heart size={24} className="fill-white" />
+              </div>
+              <div className="flex flex-col gap-1 z-10">
+                <span className="text-xl sm:text-2xl font-black text-white leading-tight">
+                  Bài hát đã thích
+                </span>
+                <span className="text-xs sm:text-sm text-white/90 font-semibold">
+                  {likedSongCount} bài hát đã thích
+                </span>
+              </div>
+            </div>
+          )}
           {filteredPlaylists.map((pl) => (
             <PlaylistCard key={pl.id} playlist={pl} />
           ))}

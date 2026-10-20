@@ -7,6 +7,7 @@ import {
   Shuffle,
   MoreHorizontal,
   UserPlus,
+  UserCheck,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -18,25 +19,26 @@ import {
   getAlbumSongs,
 } from "../api/catalog/public";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { useAuthStore } from "../store/useAuthStore";
-import { showLoginToast } from "../utils/toastUtils";
+import { useFavoriteStore } from "../store/useFavoriteStore";
 import { Button } from "../components/ui/Button";
 import { SongRow } from "../components/ui/SongRow";
 import { SongCard } from "../components/ui/SongCard";
 import { SectionCarousel } from "../components/ui/SectionCarousel";
-import { CoverImage } from "../components/ui/CoverImage";
 import { SkeletonRow, SkeletonCard } from "../components/ui/Skeleton";
 
 export const ArtistPage = () => {
   const { id: artistId } = useParams();
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { currentSong, isPlaying, setIsPlaying, setCurrentSong } =
     usePlayerStore();
 
   const [showAllSongs, setShowAllSongs] = useState(false);
   // Filter: null = tất cả, "ALBUM" = album, "EP" = ep
   const [albumFilter, setAlbumFilter] = useState(null);
+
+  const isArtistFollowed = useFavoriteStore((state) => state.isArtistFollowed);
+  const toggleFollowArtist = useFavoriteStore((state) => state.toggleFollowArtist);
+  const isFollowed = isArtistFollowed(artistId);
 
   // ─── Data Fetching ──────────────────────────────────────────────────────────
   const { data: artistData, isLoading: isLoadingArtist } = useQuery({
@@ -101,11 +103,11 @@ export const ArtistPage = () => {
   };
 
   const handleFollow = () => {
-    if (!isAuthenticated) {
-      showLoginToast("theo dõi nghệ sĩ");
-      return;
+    if (artist) {
+      toggleFollowArtist(artist, {
+        onLogin: () => navigate("/login"),
+      });
     }
-    // TODO: Gọi API follow nghệ sĩ
   };
 
   const handlePlayAlbumCard = async (albumId) => {
@@ -212,13 +214,22 @@ export const ArtistPage = () => {
 
         {/* Nút Follow */}
         <Button
-          variant="secondary"
+          variant={isFollowed ? "primary" : "secondary"}
           size="md"
           onClick={handleFollow}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 transition-all active:scale-95"
         >
-          <UserPlus size={18} />
-          Theo dõi
+          {isFollowed ? (
+            <>
+              <UserCheck size={18} />
+              <span>Đang theo dõi</span>
+            </>
+          ) : (
+            <>
+              <UserPlus size={18} />
+              <span>Theo dõi</span>
+            </>
+          )}
         </Button>
 
         {/* Nút thêm */}
