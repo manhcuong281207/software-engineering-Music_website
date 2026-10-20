@@ -6,8 +6,6 @@ import {
   Pause,
   Shuffle,
   MoreHorizontal,
-  UserPlus,
-  UserCheck,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -19,7 +17,7 @@ import {
   getAlbumSongs,
 } from "../api/catalog/public";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { useFavoriteStore } from "../store/useFavoriteStore";
+import { useFollowArtists } from "../hooks/useFollowArtists";
 import { Button } from "../components/ui/Button";
 import { SongRow } from "../components/ui/SongRow";
 import { SongCard } from "../components/ui/SongCard";
@@ -29,16 +27,15 @@ import { SkeletonRow, SkeletonCard } from "../components/ui/Skeleton";
 export const ArtistPage = () => {
   const { id: artistId } = useParams();
   const navigate = useNavigate();
-  const { currentSong, isPlaying, setIsPlaying, setCurrentSong } =
+  const { isFollowing, toggleFollowArtist } = useFollowArtists();
+  const { currentSong, isPlaying, setIsPlaying, playSongWithContext } =
     usePlayerStore();
+
+  const isFollowed = isFollowing(artistId);
 
   const [showAllSongs, setShowAllSongs] = useState(false);
   // Filter: null = tất cả, "ALBUM" = album, "EP" = ep
   const [albumFilter, setAlbumFilter] = useState(null);
-
-  const isArtistFollowed = useFavoriteStore((state) => state.isArtistFollowed);
-  const toggleFollowArtist = useFavoriteStore((state) => state.toggleFollowArtist);
-  const isFollowed = isArtistFollowed(artistId);
 
   // ─── Data Fetching ──────────────────────────────────────────────────────────
   const { data: artistData, isLoading: isLoadingArtist } = useQuery({
@@ -91,23 +88,25 @@ export const ArtistPage = () => {
       setIsPlaying(false);
       return;
     }
-    setCurrentSong(allSongs[0]);
-    setIsPlaying(true);
+    playSongWithContext(allSongs[0], allSongs, 0);
   };
 
   const handleShufflePlay = () => {
     if (allSongs.length === 0) return;
     const randomIndex = Math.floor(Math.random() * allSongs.length);
-    setCurrentSong(allSongs[randomIndex]);
-    setIsPlaying(true);
+    playSongWithContext(allSongs[randomIndex], allSongs, randomIndex);
   };
 
   const handleFollow = () => {
-    if (artist) {
-      toggleFollowArtist(artist, {
-        onLogin: () => navigate("/login"),
-      });
-    }
+    if (!artist) return;
+    toggleFollowArtist({
+      artistId,
+      id: artistId,
+      artistName: artist.stageName,
+      stageName: artist.stageName,
+      avatar: artist.avatarUrl,
+      avatarUrl: artist.avatarUrl,
+    });
   };
 
   const handlePlayAlbumCard = async (albumId) => {
@@ -118,9 +117,7 @@ export const ArtistPage = () => {
       });
       const songs = res.data?.content || [];
       if (songs.length > 0) {
-        const randomIndex = Math.floor(Math.random() * songs.length);
-        setCurrentSong(songs[randomIndex]);
-        setIsPlaying(true);
+        playSongWithContext(songs[0], songs, 0);
       }
     } catch (err) {
       console.error(err);
@@ -212,25 +209,13 @@ export const ArtistPage = () => {
           <Shuffle size={22} />
         </Button>
 
-        {/* Nút Follow */}
-        <Button
-          variant={isFollowed ? "primary" : "secondary"}
-          size="md"
+        {/* Nút Follow tối giản theo thiết kế */}
+        <button
           onClick={handleFollow}
-          className="flex items-center gap-2 transition-all active:scale-95"
+          className="px-4 py-1.5 rounded-full border border-neutral-500/60 hover:border-white text-white font-bold text-sm bg-transparent hover:scale-105 active:scale-95 transition-all cursor-pointer select-none"
         >
-          {isFollowed ? (
-            <>
-              <UserCheck size={18} />
-              <span>Đang theo dõi</span>
-            </>
-          ) : (
-            <>
-              <UserPlus size={18} />
-              <span>Theo dõi</span>
-            </>
-          )}
-        </Button>
+          {isFollowed ? "Đang theo dõi" : "Theo dõi"}
+        </button>
 
         {/* Nút thêm */}
         <Button variant="ghost" size="md" iconOnly>
@@ -263,7 +248,7 @@ export const ArtistPage = () => {
                     index={idx + 1}
                     song={song}
                     isPlaying={isPlaying && currentSong?.id === song.id}
-                    onPlayClick={() => setCurrentSong(song)}
+                    onPlayClick={() => playSongWithContext(song, allSongs, idx)}
                   />
                 ))}
               </div>

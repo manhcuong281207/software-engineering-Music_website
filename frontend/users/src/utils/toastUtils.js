@@ -1,24 +1,32 @@
 import { toast } from "sonner";
 
 /**
- * Hiển thị thông báo (toast) yêu cầu đăng nhập với nút điều hướng đến trang đăng nhập.
- * @param {string} actionName - Hành động người dùng muốn thực hiện (VD: "tạo danh sách phát mới")
- * @param {Function} [onLogin] - Callback khi người dùng nhấn "Đăng nhập" (thường là navigate('/login'))
+ * Hiển thị thông báo (toast) yêu cầu đăng nhập với thiết kế màu xanh đồng nhất kèm nút Đăng nhập.
+ * @param {string} actionName - Hành động người dùng muốn thực hiện (VD: "thêm bài hát vào danh sách yêu thích")
+ * @param {string} [redirectPath] - Đường dẫn muốn quay lại sau khi đăng nhập (tùy chọn)
  */
-export const showLoginToast = (actionName, onLogin) => {
-  toast("Bạn chưa đăng nhập", {
-    description: `Vui lòng đăng nhập để ${actionName}.`,
-    duration: 5000,
-    style: {
-      background: "#1f1f1f",
-      color: "#ffffff",
-      border: "1px solid #383838",
+export const showLoginToast = (actionName, redirectPath) => {
+  const currentPath = redirectPath || window.location.pathname;
+
+  toast("Yêu cầu đăng nhập", {
+    description: `Bạn cần đăng nhập để ${actionName}.`,
+    action: {
+      label: "Đăng nhập",
+      onClick: () => {
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+      },
     },
-    action: onLogin
-      ? {
-          label: "Đăng nhập",
-          onClick: onLogin,
-        }
-      : undefined,
+    style: {
+      background: "#2563eb", // blue-600
+      color: "#ffffff",
+      border: "none",
+    },
+    actionButtonStyle: {
+      background: "#ffffff",
+      color: "#1d4ed8",
+      fontWeight: "bold",
+      borderRadius: "9999px",
+      padding: "6px 14px",
+    },
   });
 };
