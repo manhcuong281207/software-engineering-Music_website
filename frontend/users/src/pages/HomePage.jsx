@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { SongCard } from "../components/ui/SongCard";
@@ -16,7 +16,8 @@ import {
 import { getPublicArtists } from "../api/artists/public";
 import { getFavoriteSongs } from "../api/users/favorite";
 import { getFollowedArtists } from "../api/users/follow";
-import { Heart, UserPlus } from "lucide-react";
+import { getUserPlayHistory } from "../api/users/history";
+import { Heart, UserPlus, History } from "lucide-react";
 import { toast } from "sonner";
 
 export const HomePage = () => {
@@ -95,12 +96,34 @@ export const HomePage = () => {
     enabled: isAuthenticated,
   });
 
+  // Fetch Listening History (User)
+  const { data: historySongsData, isLoading: isLoadingHistorySongs } = useQuery({
+    queryKey: ["userPlayHistory"],
+    queryFn: () => getUserPlayHistory({ page: 0, size: 30 }),
+    enabled: isAuthenticated,
+  });
+
   // Trích xuất dữ liệu từ response (chuẩn hóa API backend trả về format: data.data.content)
   const songs = songsData?.data?.content || [];
   const artists = artistsData?.data?.content || [];
   const albums = albumsData?.data?.content || [];
   const favoriteSongs = favoriteSongsData?.content || [];
   const followedArtists = followedArtistsData?.content || [];
+
+  // Lọc trùng các bài hát đã nghe: giữ lại lần nghe gần nhất theo thời gian (playedAt DESC)
+  const historySongs = useMemo(() => {
+    const rawList = historySongsData?.content || [];
+    const seen = new Set();
+    const unique = [];
+    for (const item of rawList) {
+      const sId = String(item.songId || item.id);
+      if (!seen.has(sId)) {
+        seen.add(sId);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }, [historySongsData]);
 
   const handlePlayFavoriteSong = async (song) => {
     try {
@@ -130,6 +153,34 @@ export const HomePage = () => {
     }
   };
 
+  const handlePlayHistorySong = async (song) => {
+    try {
+      const songId = song.id || song.songId;
+      let fullSong = song;
+      if (!fullSong.audioUrl) {
+        const detailRes = await getSongById(songId);
+        if (detailRes?.data) {
+          fullSong = {
+            ...song,
+            ...detailRes.data,
+            id: detailRes.data.id || songId,
+            songId: detailRes.data.id || songId,
+          };
+        }
+      }
+      if (!fullSong.audioUrl) {
+        toast.error("Không tìm thấy nguồn âm thanh cho bài hát này.");
+        return;
+      }
+      setQueue(historySongs);
+      setCurrentSong(fullSong);
+      setIsPlaying(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể tải bài hát.");
+    }
+  };
+
   // Tạo khung Skeleton khi đang tải (sử dụng component chuẩn mới)
   const renderSkeletons = (count = 5, isArtist = false) => {
     return Array.from({ length: count }).map((_, idx) => (
@@ -147,6 +198,37 @@ export const HomePage = () => {
       {/* 1. KHỐI PRIVATE (Chỉ hiện khi đăng nhập) */}
       {isAuthenticated && (
         <>
+          {/* Section Lịch sử nghe gần đây (Đã lọc trùng) */}
+          <SectionCarousel title="Đã nghe gần đây">
+            {isLoadingHistorySongs ? (
+              renderSkeletons()
+            ) : historySongs.length > 0 ? (
+              historySongs.map((song) => (
+                <div
+                  key={song.id || song.songId}
+                  className="w-[140px] sm:w-[170px] md:w-[190px] lg:w-[210px] flex-shrink-0"
+                >
+                  <SongCard
+                    id={song.id || song.songId}
+                    type="song"
+                    title={song.title}
+                    subtitle={song.artistName}
+                    artistName={song.artistName}
+                    imageUrl={song.coverImage}
+                    onClick={() => handlePlayHistorySong(song)}
+                    onPlayClick={() => handlePlayHistorySong(song)}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-8 text-center text-spotify-sub flex flex-col items-center justify-center gap-2 w-full bg-white/[0.02] border border-dashed border-white/10 rounded-xl p-6">
+                <History size={28} className="text-[#fa2d48] opacity-80" />
+                <span className="text-sm text-white font-medium">Chưa có bài hát nào trong lịch sử nghe</span>
+                <span className="text-xs text-spotify-sub">Bắt đầu khám phá và thưởng thức những giai điệu bạn yêu thích!</span>
+              </div>
+            )}
+          </SectionCarousel>
+
           {/* Section Bài hát yêu thích */}
           <SectionCarousel title="Bài hát bạn yêu thích">
             {isLoadingFavoriteSongs ? (
