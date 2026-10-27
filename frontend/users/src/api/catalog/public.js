@@ -84,3 +84,15 @@ export const getAlbumById = async (id) => {
   return response.data;
 };
 
+/**
+ * Tìm kiếm tổng hợp (Unified Search) theo từ khóa
+ * @param {string} keyword
+ * @param {number} limit
+ */
+export const searchCatalogApi = async (keyword, limit = 5) => {
+  const response = await api.get('/catalog/public/search', {
+    params: { keyword, limit },
+  });
+  return response.data;
+};
+

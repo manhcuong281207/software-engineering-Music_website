@@ -12,6 +12,7 @@ import { AlbumPage } from './pages/AlbumPage';
 import { ArtistPage } from './pages/ArtistPage';
 import { LikedSongsPage } from './pages/LikedSongsPage';
 import { PlaylistPage } from './pages/PlaylistPage';
+import { SearchPage } from './pages/SearchPage';
 
 // Khởi tạo React Query Client
 const queryClient = new QueryClient({
@@ -34,13 +35,14 @@ function App() {
           {/* Group 1: Các trang được bọc trong MainLayout (Có Sidebar & Player) */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/browse" element={<SearchPage />} />
             <Route path="/album/:id" element={<AlbumPage />} />
             <Route path="/artist/:id" element={<ArtistPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/collection/tracks" element={<LikedSongsPage />} />
             <Route path="/liked" element={<LikedSongsPage />} />
-            {/* Các trang sau này như /search, /library sẽ thêm vào đây */}
           </Route>
           
           {/* Group 2: Các trang độc lập, toàn màn hình */}
