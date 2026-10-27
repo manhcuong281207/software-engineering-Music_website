@@ -25,17 +25,17 @@ public interface SongRepository extends JpaRepository<Song, UUID> {
 
     @Query(value = "SELECT DISTINCT s FROM Song s LEFT JOIN s.genres g LEFT JOIN s.artists a " +
            "WHERE s.status = 'APPROVED' AND s.isDeleted = false " +
-           "AND (:keyword IS NULL OR TRIM(:keyword) = '' OR " +
-           "LOWER(s.title) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
-           "LOWER(s.ownerName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
-           "LOWER(a.artistName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
+           "AND (:keyword IS NULL OR :keyword = '' OR " +
+           "    LOWER(s.title) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
+           "    LOWER(s.ownerName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
+           "    LOWER(a.artistName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
            "AND (:genreId IS NULL OR g.id = :genreId)",
            countQuery = "SELECT COUNT(DISTINCT s) FROM Song s LEFT JOIN s.genres g LEFT JOIN s.artists a " +
            "WHERE s.status = 'APPROVED' AND s.isDeleted = false " +
-           "AND (:keyword IS NULL OR TRIM(:keyword) = '' OR " +
-           "LOWER(s.title) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
-           "LOWER(s.ownerName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
-           "LOWER(a.artistName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
+           "AND (:keyword IS NULL OR :keyword = '' OR " +
+           "    LOWER(s.title) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
+           "    LOWER(s.ownerName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
+           "    LOWER(a.artistName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
            "AND (:genreId IS NULL OR g.id = :genreId)")
     Page<Song> findPublicSongs(@Param("keyword") String keyword, @Param("genreId") UUID genreId, Pageable pageable);
 

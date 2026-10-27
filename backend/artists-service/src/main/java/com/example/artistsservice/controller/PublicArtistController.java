@@ -60,7 +60,8 @@ public class PublicArtistController {
 
         Sort resolvedSort = buildSafeSort(sort);
         Pageable pageable = PageRequest.of(page, size, resolvedSort);
-        Page<Artist> activeArtists = artistRepository.findPublicArtists(keyword, pageable);
+        String cleanKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        Page<Artist> activeArtists = artistRepository.findActiveArtistsWithKeyword(cleanKeyword, pageable);
 
         Page<ArtistPublicResponse> responseData = activeArtists
             .map(artist -> modelMapper.map(artist, ArtistPublicResponse.class));
