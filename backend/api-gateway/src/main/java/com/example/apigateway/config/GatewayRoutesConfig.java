@@ -17,14 +17,14 @@ public class GatewayRoutesConfig {
     @Value("${service.uri.users:http://localhost:8082}")
     private String usersServiceUri;
 
+    @Value("${service.uri.catalog:http://localhost:8081}")
+    private String catalogServiceUri;
+
     @Value("${service.uri.artists:http://localhost:8083}")
     private String artistsServiceUri;
 
     @Value("${service.uri.admin:http://localhost:8084}")
     private String adminServiceUri;
-
-    @Value("${service.uri.catalog:http://localhost:8081}")
-    private String catalogServiceUri;
 
     @Bean
     public RouterFunction<ServerResponse> customRoutes() {
@@ -32,6 +32,10 @@ public class GatewayRoutesConfig {
                 .route(path("/api/user/**"), http())
                 .before(uri(usersServiceUri))
                 .build()
+            .and(route("catalog-service")
+                .route(path("/api/catalog/**"), http())
+                .before(uri(catalogServiceUri))
+                .build())
             .and(route("artists-service")
                 .route(path("/api/artist/**"), http())
                 .before(uri(artistsServiceUri))
@@ -39,10 +43,6 @@ public class GatewayRoutesConfig {
             .and(route("admin-service")
                 .route(path("/api/admin/**"), http())
                 .before(uri(adminServiceUri))
-                .build())
-            .and(route("catalog-service")
-                .route(path("/api/catalog/**"), http())
-                .before(uri(catalogServiceUri))
                 .build());
     }
 }
