@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight, User, LogOut, ChevronDown, Compass, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, LogOut, ChevronDown, Compass } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/Button';
 import { useAuthStore } from '../store/useAuthStore';
 import { logoutApi, getCurrentUserApi } from '../api/auth/auth';
+import { SearchAutocomplete } from '../components/search/SearchAutocomplete';
 
 export const Topbar = () => {
   const navigate = useNavigate();
@@ -14,34 +15,6 @@ export const Topbar = () => {
   const { user, isAuthenticated, logout, setUser, refreshToken } = useAuthStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
-
-  // Từ khóa tìm kiếm đồng bộ với URL query khi ở trang duyệt tìm
-  const [searchKeyword, setSearchKeyword] = useState('');
-
-  useEffect(() => {
-    if (location.pathname === '/search' || location.pathname === '/browse') {
-      const q = new URLSearchParams(location.search).get('q') || '';
-      setSearchKeyword(q);
-    } else {
-      setSearchKeyword('');
-    }
-  }, [location.pathname, location.search]);
-
-  const handleSearchInputChange = (e) => {
-    const val = e.target.value;
-    setSearchKeyword(val);
-    if (val.trim()) {
-      navigate(`/search?q=${encodeURIComponent(val)}`, { replace: isSearch });
-    } else if (isSearch) {
-      navigate('/search', { replace: true });
-    }
-  };
-
-  const handleSearchFocus = () => {
-    if (!isSearch) {
-      navigate('/search');
-    }
-  };
 
   // Tự động tải avatarUrl và thông tin profile mới nhất nếu chưa có
   useEffect(() => {
@@ -135,29 +108,8 @@ export const Topbar = () => {
           )}
         </Button>
 
-        {/* Thanh tìm kiếm */}
-        <div className="relative max-w-sm w-full hidden md:block group">
-          <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-spotify-sub group-focus-within:text-white" />
-          <input
-            type="text"
-            value={searchKeyword}
-            onChange={handleSearchInputChange}
-            onFocus={handleSearchFocus}
-            placeholder="Bạn muốn nghe gì?"
-            className="w-full bg-spotify-card hover:bg-spotify-card-hover text-spotify-text placeholder-spotify-sub rounded-full pl-10 pr-9 py-3 outline-none focus:ring-2 focus:ring-white transition-all border-none text-sm"
-          />
-          {searchKeyword && (
-            <button
-              onClick={() => {
-                setSearchKeyword('');
-                if (isSearch) navigate('/search');
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-spotify-sub hover:text-white cursor-pointer"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
+        {/* Thanh tìm kiếm gợi ý thông minh với Debounce & Popup */}
+        <SearchAutocomplete className="flex-1 max-w-sm md:max-w-md" />
 
         {/* Nút bấm icon Duyệt tìm bên cạnh thanh tìm kiếm */}
         <Button
