@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -196,6 +196,30 @@ export const SearchPage = () => {
 
   const searchResults = searchResponse?.data;
 
+  // Chuẩn hóa dữ liệu topResult an toàn (hỗ trợ cả trường hợp lồng item hoặc phẳng)
+  const resolvedTopResult = useMemo(() => {
+    const tr = searchResults?.topResult;
+    if (!tr) return null;
+    const item = tr.item || tr;
+    const type = tr.type || (item.stageName ? "ARTIST" : item.albumType ? "ALBUM" : "SONG");
+    const id = item.id || tr.id;
+    const title = item.title || item.stageName || item.name || tr.title || "Không có tên";
+    const imageUrl = item.coverImage || item.avatarUrl || item.imageUrl || tr.imageUrl;
+    let subtitle = tr.subtitle;
+    if (!subtitle) {
+      if (type === "ARTIST") {
+        subtitle = item.followerCount
+          ? `${Number(item.followerCount).toLocaleString("vi-VN")} người theo dõi`
+          : "Nghệ sĩ";
+      } else if (type === "ALBUM") {
+        subtitle = `${item.ownerName || "Nghệ sĩ"} • ${item.albumType || "Album"}`;
+      } else {
+        subtitle = item.ownerName ? `Bài hát • ${item.ownerName}` : "Bài hát";
+      }
+    }
+    return { id, type, item, title, imageUrl, subtitle };
+  }, [searchResults?.topResult]);
+
   // Xử lý chọn thể loại
   const handleSelectGenre = (genre) => {
     const next = new URLSearchParams(searchParams);
@@ -276,44 +300,57 @@ export const SearchPage = () => {
               {/* Kết quả hàng đầu & Danh sách bài hát */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Top Result Card (nếu có) */}
-                {searchResults.topResult && (
+                {resolvedTopResult && (
                   <div className="lg:col-span-5">
                     <h2 className="text-xl font-bold text-white mb-4">
                       Kết quả hàng đầu
                     </h2>
                     <div
                       onClick={() => {
-                        if (searchResults.topResult.type === "ARTIST") {
-                          navigate(`/artist/${searchResults.topResult.id}`);
-                        } else if (searchResults.topResult.type === "ALBUM") {
-                          navigate(`/album/${searchResults.topResult.id}`);
+                        if (resolvedTopResult.type === "ARTIST") {
+                          navigate(`/artist/${resolvedTopResult.id}`);
+                        } else if (resolvedTopResult.type === "ALBUM") {
+                          navigate(`/album/${resolvedTopResult.id}`);
+                        } else if (resolvedTopResult.type === "SONG") {
+                          playSongWithContext(
+                            resolvedTopResult.item || resolvedTopResult,
+                            [resolvedTopResult.item || resolvedTopResult],
+                            0
+                          );
                         }
                       }}
                       className="p-6 rounded-2xl bg-[#181818] hover:bg-[#222222] transition-all duration-300 group cursor-pointer relative shadow-xl border border-white/5"
                     >
                       <CoverImage
-                        src={searchResults.topResult.imageUrl}
-                        alt={searchResults.topResult.title}
-                        isArtist={searchResults.topResult.type === "ARTIST"}
+                        src={resolvedTopResult.imageUrl}
+                        alt={resolvedTopResult.title}
+                        isArtist={resolvedTopResult.type === "ARTIST"}
                         className={`w-24 h-24 mb-5 shadow-2xl ${
-                          searchResults.topResult.type === "ARTIST"
+                          resolvedTopResult.type === "ARTIST"
                             ? "rounded-full"
                             : "rounded-xl"
                         }`}
                       />
                       <h3 className="text-2xl font-black text-white group-hover:text-[#fa2d48] transition-colors truncate">
-                        {searchResults.topResult.title}
+                        {resolvedTopResult.title}
                       </h3>
                       <p className="text-spotify-sub text-sm mt-1 truncate">
-                        {searchResults.topResult.subtitle}
+                        {resolvedTopResult.subtitle}
                       </p>
-                      <span className="inline-block mt-4 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-black/40 text-neutral-300 border border-white/10">
-                        {searchResults.topResult.type === "ARTIST"
-                          ? "Nghệ sĩ"
-                          : searchResults.topResult.type === "ALBUM"
-                          ? "Album"
-                          : "Bài hát"}
-                      </span>
+                      <div className="flex items-center justify-between mt-4">
+                        <span className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-black/40 text-neutral-300 border border-white/10">
+                          {resolvedTopResult.type === "ARTIST"
+                            ? "Nghệ sĩ"
+                            : resolvedTopResult.type === "ALBUM"
+                            ? "Album"
+                            : "Bài hát"}
+                        </span>
+                        {resolvedTopResult.type === "SONG" && (
+                          <div className="w-10 h-10 rounded-full bg-[#fa2d48] text-white flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                            <Play size={18} fill="currentColor" className="translate-x-0.5" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -321,7 +358,7 @@ export const SearchPage = () => {
                 {/* Danh sách bài hát khớp */}
                 <div
                   className={
-                    searchResults.topResult ? "lg:col-span-7" : "lg:col-span-12"
+                    resolvedTopResult ? "lg:col-span-7" : "lg:col-span-12"
                   }
                 >
                   <h2 className="text-xl font-bold text-white mb-4">Bài hát</h2>
