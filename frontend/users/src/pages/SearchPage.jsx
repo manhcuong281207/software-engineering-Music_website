@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -21,11 +21,29 @@ import {
   AlertCircle,
   RefreshCw,
   X,
+  SearchX,
+  ArrowUpDown,
+  Filter,
 } from "lucide-react";
-import { getPublicGenres, getPublicSongs, searchCatalogApi } from "../api/catalog/public";
+import { toast } from "sonner";
+
+import {
+  getPublicGenres,
+  getPublicSongs,
+  getPublicAlbums,
+  getArtistSongs,
+  getAlbumSongs,
+  searchCatalogApi,
+} from "../api/catalog/public";
+import { getPublicArtists } from "../api/artists/public";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { SongRow } from "../components/ui/SongRow";
 import { CoverImage } from "../components/ui/CoverImage";
+import { ArtistCard } from "../components/ui/ArtistCard";
+import { AlbumCard } from "../components/ui/AlbumCard";
+import { TopResultCard } from "../components/search/TopResultCard";
+import { Pagination } from "../components/ui/Pagination";
+import { SkeletonCard, SkeletonRow } from "../components/ui/Skeleton";
 
 // Bảng màu & biểu tượng đặc trưng chuẩn Spotify cho từng thể loại
 const GENRE_STYLE_MAP = {
@@ -118,7 +136,6 @@ const getGenreStyle = (name = "") => {
   if (GENRE_STYLE_MAP[normalized]) {
     return GENRE_STYLE_MAP[normalized];
   }
-  // Băm tên thể loại để chọn bảng màu cố định
   let hash = 0;
   for (let i = 0; i < normalized.length; i++) {
     hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
@@ -131,15 +148,47 @@ const getGenreStyle = (name = "") => {
   };
 };
 
+// Cấu hình các Tabs tìm kiếm
+const SEARCH_TABS = [
+  { id: "all", label: "Tất cả" },
+  { id: "songs", label: "Bài hát" },
+  { id: "artists", label: "Nghệ sĩ" },
+  { id: "albums", label: "Album" },
+];
+
+// Cấu hình sắp xếp cho từng Tab
+const SONG_SORT_OPTIONS = [
+  { value: "playCount,desc", label: "Nhiều lượt nghe nhất" },
+  { value: "likeCount,desc", label: "Yêu thích nhất" },
+  { value: "createdAt,desc", label: "Mới nhất" },
+  { value: "title,asc", label: "Tên bài hát (A-Z)" },
+];
+
+const ARTIST_SORT_OPTIONS = [
+  { value: "followerCount,desc", label: "Nhiều người theo dõi nhất" },
+  { value: "createdAt,desc", label: "Mới tham gia" },
+  { value: "stageName,asc", label: "Tên nghệ sĩ (A-Z)" },
+];
+
+const ALBUM_SORT_OPTIONS = [
+  { value: "likeCount,desc", label: "Yêu thích nhất" },
+  { value: "createdAt,desc", label: "Mới phát hành" },
+  { value: "title,asc", label: "Tên album (A-Z)" },
+];
+
 export const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
   const keyword = searchParams.get("q") || "";
   const genreParam = searchParams.get("genre") || "";
+  const activeTab = searchParams.get("type") || "all";
+  const pageParam = parseInt(searchParams.get("page") || "0", 10);
+  const sortParam = searchParams.get("sort") || "";
 
   const { playSongWithContext, currentSong, isPlaying } = usePlayerStore();
 
-  // 1. Tải toàn bộ danh sách thể loại nhạc từ Backend API
+  // ─── 1. Xử lý Thể loại Nhạc ──────────────────────────────────────────────────
   const {
     data: genresResponse,
     isLoading: isLoadingGenres,
@@ -148,12 +197,11 @@ export const SearchPage = () => {
   } = useQuery({
     queryKey: ["publicGenres"],
     queryFn: getPublicGenres,
-    staleTime: 1000 * 60 * 15, // 15 phút
+    staleTime: 1000 * 60 * 15,
   });
 
   const genres = useMemo(() => genresResponse?.data || [], [genresResponse]);
 
-  // Đồng bộ selectedGenre trực tiếp từ query param ?genre và danh sách genres
   const selectedGenre = useMemo(() => {
     if (!genreParam || genres.length === 0) return null;
     return (
@@ -163,7 +211,6 @@ export const SearchPage = () => {
     );
   }, [genreParam, genres]);
 
-  // 2. Tải bài hát thuộc thể loại đã chọn
   const {
     data: genreSongsResponse,
     isLoading: isLoadingGenreSongs,
@@ -183,58 +230,199 @@ export const SearchPage = () => {
     [genreSongsResponse]
   );
 
-  // 3. Tải kết quả tìm kiếm nếu có từ khóa
+  // ─── 2. Tải kết quả Unified Search (Tab "Tất cả") ─────────────────────────────
+  const hasKeyword = keyword.trim().length > 0;
+
   const {
-    data: searchResponse,
-    isLoading: isLoadingSearch,
+    data: unifiedSearchResponse,
+    isLoading: isLoadingUnified,
+    isError: isErrorUnified,
+    refetch: refetchUnified,
   } = useQuery({
-    queryKey: ["catalogSearch", keyword],
+    queryKey: ["catalogUnifiedSearch", keyword],
     queryFn: () => searchCatalogApi(keyword, 10),
-    enabled: keyword.trim().length > 0,
+    enabled: hasKeyword && activeTab === "all",
     staleTime: 1000 * 60 * 2,
   });
 
-  const searchResults = searchResponse?.data;
+  const unifiedData = unifiedSearchResponse?.data;
+  const topResult = unifiedData?.topResult;
+  const unifiedSongs = unifiedData?.songs || [];
+  const unifiedArtists = unifiedData?.artists || [];
+  const unifiedAlbums = unifiedData?.albums || [];
 
-  // Chuẩn hóa dữ liệu topResult an toàn (hỗ trợ cả trường hợp lồng item hoặc phẳng)
-  const resolvedTopResult = useMemo(() => {
-    const tr = searchResults?.topResult;
-    if (!tr) return null;
-    const item = tr.item || tr;
-    const type = tr.type || (item.stageName ? "ARTIST" : item.albumType ? "ALBUM" : "SONG");
-    const id = item.id || tr.id;
-    const title = item.title || item.stageName || item.name || tr.title || "Không có tên";
-    const imageUrl = item.coverImage || item.avatarUrl || item.imageUrl || tr.imageUrl;
-    let subtitle = tr.subtitle;
-    if (!subtitle) {
-      if (type === "ARTIST") {
-        subtitle = item.followerCount
-          ? `${Number(item.followerCount).toLocaleString("vi-VN")} người theo dõi`
-          : "Nghệ sĩ";
-      } else if (type === "ALBUM") {
-        subtitle = `${item.ownerName || "Nghệ sĩ"} • ${item.albumType || "Album"}`;
-      } else {
-        subtitle = item.ownerName ? `Bài hát • ${item.ownerName}` : "Bài hát";
-      }
+  // ─── 3. Tích hợp API tìm kiếm riêng lẻ Bài hát (Tab "Bài hát") ────────────────
+  const songSort = sortParam || "playCount,desc";
+  const {
+    data: songsSearchResponse,
+    isLoading: isLoadingSongsSearch,
+    isError: isErrorSongsSearch,
+  } = useQuery({
+    queryKey: ["searchIndividualSongs", keyword, pageParam, songSort],
+    queryFn: () =>
+      getPublicSongs({
+        keyword: keyword.trim(),
+        page: pageParam,
+        size: 20,
+        sort: songSort,
+      }),
+    enabled: hasKeyword && activeTab === "songs",
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const songsPageData = songsSearchResponse?.data;
+  const individualSongs = songsPageData?.content || [];
+  const songsTotalPages = songsPageData?.totalPages || 0;
+  const songsTotalElements = songsPageData?.totalElements || 0;
+
+  // ─── 4. Tích hợp API tìm kiếm riêng lẻ Nghệ sĩ (Tab "Nghệ sĩ") ────────────────
+  const artistSort = sortParam || "followerCount,desc";
+  const {
+    data: artistsSearchResponse,
+    isLoading: isLoadingArtistsSearch,
+    isError: isErrorArtistsSearch,
+  } = useQuery({
+    queryKey: ["searchIndividualArtists", keyword, pageParam, artistSort],
+    queryFn: () =>
+      getPublicArtists({
+        keyword: keyword.trim(),
+        page: pageParam,
+        size: 18,
+        sort: artistSort,
+      }),
+    enabled: hasKeyword && activeTab === "artists",
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const artistsPageData = artistsSearchResponse?.data;
+  const individualArtists = artistsPageData?.content || [];
+  const artistsTotalPages = artistsPageData?.totalPages || 0;
+  const artistsTotalElements = artistsPageData?.totalElements || 0;
+
+  // ─── 5. Tích hợp API tìm kiếm riêng lẻ Album (Tab "Album") ────────────────────
+  const albumSort = sortParam || "likeCount,desc";
+  const {
+    data: albumsSearchResponse,
+    isLoading: isLoadingAlbumsSearch,
+    isError: isErrorAlbumsSearch,
+  } = useQuery({
+    queryKey: ["searchIndividualAlbums", keyword, pageParam, albumSort],
+    queryFn: () =>
+      getPublicAlbums({
+        keyword: keyword.trim(),
+        page: pageParam,
+        size: 18,
+        sort: albumSort,
+      }),
+    enabled: hasKeyword && activeTab === "albums",
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const albumsPageData = albumsSearchResponse?.data;
+  const individualAlbums = albumsPageData?.content || [];
+  const albumsTotalPages = albumsPageData?.totalPages || 0;
+  const albumsTotalElements = albumsPageData?.totalElements || 0;
+
+  // ─── Handlers điều hướng & bộ lọc ───────────────────────────────────────────
+  const handleTabChange = (tabId) => {
+    const next = new URLSearchParams(searchParams);
+    if (tabId === "all") {
+      next.delete("type");
+    } else {
+      next.set("type", tabId);
     }
-    return { id, type, item, title, imageUrl, subtitle };
-  }, [searchResults?.topResult]);
+    next.delete("page");
+    next.delete("sort");
+    setSearchParams(next);
+  };
 
-  // Xử lý chọn thể loại
+  const handlePageChange = (newPage) => {
+    const next = new URLSearchParams(searchParams);
+    if (newPage === 0) {
+      next.delete("page");
+    } else {
+      next.set("page", String(newPage));
+    }
+    setSearchParams(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSortChange = (newSort) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("sort", newSort);
+    next.delete("page"); // Reset về trang đầu khi đổi cách sắp xếp
+    setSearchParams(next);
+  };
+
+  const handleClearSearch = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    next.delete("type");
+    next.delete("page");
+    next.delete("sort");
+    setSearchParams(next);
+  };
+
   const handleSelectGenre = (genre) => {
     const next = new URLSearchParams(searchParams);
     next.set("genre", genre.id);
     setSearchParams(next);
   };
 
-  // Quay lại danh sách tất cả thể loại
   const handleBackToAllGenres = () => {
-    const newParams = new URLSearchParams(searchParams);
-    newParams.delete("genre");
-    setSearchParams(newParams);
+    const next = new URLSearchParams(searchParams);
+    next.delete("genre");
+    setSearchParams(next);
   };
 
-  // Phát danh sách bài hát trong thể loại
+  // ─── Handlers phát nhạc thông minh ──────────────────────────────────────────
+  const handlePlaySongItem = (song, songList = [], index = 0) => {
+    if (!song) return;
+    const list = songList.length > 0 ? songList : [song];
+    playSongWithContext(song, list, index);
+  };
+
+  const handlePlayArtist = async (artist) => {
+    if (!artist?.id) return;
+    try {
+      const res = await getArtistSongs(artist.id, {
+        size: 50,
+        sort: "likeCount,desc",
+      });
+      const songs = res?.data?.content || [];
+      if (songs.length > 0) {
+        const randomIndex = Math.floor(Math.random() * songs.length);
+        playSongWithContext(songs[randomIndex], songs, randomIndex);
+        toast.success(`Đang phát nhạc của nghệ sĩ ${artist.stageName || "này"}`);
+      } else {
+        toast.info(`Nghệ sĩ ${artist.stageName || ""} chưa có bài hát khả dụng`);
+      }
+    } catch (err) {
+      console.error("Lỗi khi phát nhạc nghệ sĩ:", err);
+      toast.error("Không thể phát nhạc nghệ sĩ vào lúc này");
+    }
+  };
+
+  const handlePlayAlbum = async (album) => {
+    if (!album?.id) return;
+    try {
+      const res = await getAlbumSongs(album.id, {
+        size: 50,
+        sort: "createdAt,asc",
+      });
+      const songs = res?.data?.content || [];
+      if (songs.length > 0) {
+        playSongWithContext(songs[0], songs, 0);
+        toast.success(`Đang phát album "${album.title || ""}"`);
+      } else {
+        toast.info(`Album "${album.title || ""}" chưa có bài hát khả dụng`);
+      }
+    } catch (err) {
+      console.error("Lỗi khi phát album:", err);
+      toast.error("Không thể phát album vào lúc này");
+    }
+  };
+
   const handlePlayGenreAll = (isRandom = false) => {
     if (!genreSongs || genreSongs.length === 0) return;
     const startIndex = isRandom
@@ -244,145 +432,484 @@ export const SearchPage = () => {
   };
 
   return (
-    <div className="min-h-full pb-16">
+    <div className="min-h-full pb-20">
       {/* =========================================================================
-          TRƯỜNG HỢP 1: ĐANG TÌM KIẾM THEO TỪ KHÓA (keyword !== "")
+          TRƯỜNG HỢP 1: ĐANG TÌM KIẾM THEO TỪ KHÓA (hasKeyword = true)
          ========================================================================= */}
-      {keyword.trim().length > 0 ? (
-        <div className="space-y-8 animate-in fade-in duration-300">
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+      {hasKeyword ? (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Header kết quả tìm kiếm */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-spotify-sub">
-                Kết quả tìm kiếm cho
-              </p>
-              <h1 className="text-2xl sm:text-3xl font-black text-white mt-1">
+              <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-spotify-sub mb-1">
+                <Search size={14} className="text-[#fa2d48]" />
+                <span>Kết quả tìm kiếm cho</span>
+              </div>
+              <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight break-words">
                 "{keyword}"
               </h1>
             </div>
+
             <button
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                next.delete("q");
-                setSearchParams(next);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-neutral-300 hover:text-white transition-all cursor-pointer"
+              onClick={handleClearSearch}
+              className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-neutral-300 hover:text-white transition-all cursor-pointer border border-white/5 active:scale-95"
             >
               <X size={14} />
               Xóa tìm kiếm
             </button>
           </div>
 
-          {isLoadingSearch ? (
-            <div className="space-y-4">
-              {[...Array(6)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-16 rounded-lg bg-[#181818] animate-pulse"
-                />
-              ))}
-            </div>
-          ) : !searchResults ||
-            ((!searchResults.songs || searchResults.songs.length === 0) &&
-              (!searchResults.albums || searchResults.albums.length === 0) &&
-              (!searchResults.artists || searchResults.artists.length === 0) &&
-              !searchResults.topResult) ? (
-            <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
-              <Search size={48} className="mx-auto text-neutral-500 mb-4" />
-              <h3 className="text-xl font-bold text-white mb-2">
-                Không tìm thấy kết quả phù hợp
-              </h3>
-              <p className="text-spotify-sub max-w-md mx-auto text-sm">
-                Hãy kiểm tra lại chính tả hoặc thử tìm kiếm với tên nghệ sĩ, bài hát hoặc thể loại khác.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {/* Kết quả hàng đầu & Danh sách bài hát */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Top Result Card (nếu có) */}
-                {resolvedTopResult && (
-                  <div className="lg:col-span-5">
-                    <h2 className="text-xl font-bold text-white mb-4">
-                      Kết quả hàng đầu
-                    </h2>
-                    <div
-                      onClick={() => {
-                        if (resolvedTopResult.type === "ARTIST") {
-                          navigate(`/artist/${resolvedTopResult.id}`);
-                        } else if (resolvedTopResult.type === "ALBUM") {
-                          navigate(`/album/${resolvedTopResult.id}`);
-                        } else if (resolvedTopResult.type === "SONG") {
-                          playSongWithContext(
-                            resolvedTopResult.item || resolvedTopResult,
-                            [resolvedTopResult.item || resolvedTopResult],
-                            0
-                          );
-                        }
-                      }}
-                      className="p-6 rounded-2xl bg-[#181818] hover:bg-[#222222] transition-all duration-300 group cursor-pointer relative shadow-xl border border-white/5"
-                    >
-                      <CoverImage
-                        src={resolvedTopResult.imageUrl}
-                        alt={resolvedTopResult.title}
-                        isArtist={resolvedTopResult.type === "ARTIST"}
-                        className={`w-24 h-24 mb-5 shadow-2xl ${
-                          resolvedTopResult.type === "ARTIST"
-                            ? "rounded-full"
-                            : "rounded-xl"
-                        }`}
-                      />
-                      <h3 className="text-2xl font-black text-white group-hover:text-[#fa2d48] transition-colors truncate">
-                        {resolvedTopResult.title}
-                      </h3>
-                      <p className="text-spotify-sub text-sm mt-1 truncate">
-                        {resolvedTopResult.subtitle}
-                      </p>
-                      <div className="flex items-center justify-between mt-4">
-                        <span className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-black/40 text-neutral-300 border border-white/10">
-                          {resolvedTopResult.type === "ARTIST"
-                            ? "Nghệ sĩ"
-                            : resolvedTopResult.type === "ALBUM"
-                            ? "Album"
-                            : "Bài hát"}
-                        </span>
-                        {resolvedTopResult.type === "SONG" && (
-                          <div className="w-10 h-10 rounded-full bg-[#fa2d48] text-white flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                            <Play size={18} fill="currentColor" className="translate-x-0.5" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Danh sách bài hát khớp */}
-                <div
-                  className={
-                    resolvedTopResult ? "lg:col-span-7" : "lg:col-span-12"
-                  }
+          {/* Thanh Tabs phân loại kết quả (Tất cả, Bài hát, Nghệ sĩ, Album) */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            {SEARCH_TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer whitespace-nowrap select-none ${
+                    isActive
+                      ? "bg-white text-black shadow-lg scale-105"
+                      : "bg-[#1e1e1e] hover:bg-[#282828] text-neutral-300 hover:text-white border border-white/5"
+                  }`}
                 >
-                  <h2 className="text-xl font-bold text-white mb-4">Bài hát</h2>
-                  {searchResults.songs && searchResults.songs.length > 0 ? (
-                    <div className="space-y-1">
-                      {searchResults.songs.slice(0, 5).map((song, idx) => (
-                        <SongRow
-                          key={song.id}
-                          index={idx + 1}
-                          song={song}
-                          isPlaying={isPlaying && currentSong?.id === song.id}
-                          onPlayClick={() =>
-                            playSongWithContext(song, searchResults.songs, idx)
-                          }
-                        />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* =====================================================================
+              TAB 1: TẤT CẢ (UNIFIED SEARCH) - HIỂN THỊ THEO MỨC ĐỘ ƯU TIÊN
+             ===================================================================== */}
+          {activeTab === "all" && (
+            <div className="space-y-10">
+              {isLoadingUnified ? (
+                /* Skeleton Loading cho Unified Search */
+                <div className="space-y-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-5 h-72 rounded-2xl bg-[#181818] animate-pulse" />
+                    <div className="lg:col-span-7 space-y-2">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="h-14 rounded-lg bg-[#181818] animate-pulse" />
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-spotify-sub text-sm">
-                      Không có bài hát nào khớp.
-                    </p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="h-6 w-32 bg-[#181818] animate-pulse rounded" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {[...Array(6)].map((_, i) => (
+                        <div key={i} className="h-44 rounded-xl bg-[#181818] animate-pulse" />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : isErrorUnified ? (
+                /* Lỗi gọi API Unified Search */
+                <div className="p-6 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
+                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
+                  <h3 className="text-lg font-bold text-white mb-1">
+                    Đã xảy ra lỗi khi tìm kiếm
+                  </h3>
+                  <p className="text-red-200 text-sm mb-4">
+                    Không thể kết nối đến máy chủ tìm kiếm. Vui lòng thử lại sau.
+                  </p>
+                  <button
+                    onClick={() => refetchUnified()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-red-800/50 hover:bg-red-800 text-xs font-bold text-white transition-all cursor-pointer"
+                  >
+                    <RefreshCw size={14} /> Thử lại
+                  </button>
+                </div>
+              ) : !topResult &&
+                unifiedSongs.length === 0 &&
+                unifiedArtists.length === 0 &&
+                unifiedAlbums.length === 0 ? (
+                /* Trạng thái không có kết quả */
+                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
+                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    Không tìm thấy kết quả phù hợp cho "{keyword}"
+                  </h3>
+                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
+                    Hãy kiểm tra lại chính tả hoặc thử tìm kiếm với tên nghệ sĩ, bài hát hoặc thể loại khác.
+                  </p>
+                </div>
+              ) : (
+                /* Kết quả Unified Search phong phú */
+                <div className="space-y-10">
+                  {/* Hàng 1: Kết quả hàng đầu (Top Result) & Top Bài hát */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                    {/* Top Result Card - Hiển thị ở vị trí ưu tiên cao nhất */}
+                    {topResult && (
+                      <div className="lg:col-span-5 flex flex-col">
+                        <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">
+                          Kết quả hàng đầu
+                        </h2>
+                        <TopResultCard
+                          topResult={topResult}
+                          onPlaySong={(song) => handlePlaySongItem(song, unifiedSongs)}
+                          onPlayArtist={handlePlayArtist}
+                          onPlayAlbum={handlePlayAlbum}
+                          className="flex-1"
+                        />
+                      </div>
+                    )}
+
+                    {/* Danh sách bài hát hàng đầu */}
+                    <div
+                      className={`flex flex-col ${
+                        topResult ? "lg:col-span-7" : "lg:col-span-12"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl sm:text-2xl font-bold text-white">
+                          Bài hát
+                        </h2>
+                        {unifiedSongs.length > 0 && (
+                          <button
+                            onClick={() => handleTabChange("songs")}
+                            className="text-xs sm:text-sm font-bold text-spotify-sub hover:text-white transition-colors cursor-pointer"
+                          >
+                            Xem tất cả
+                          </button>
+                        )}
+                      </div>
+
+                      {unifiedSongs.length > 0 ? (
+                        <div className="space-y-1 bg-[#141414]/60 p-2 sm:p-3 rounded-2xl border border-white/5 flex-1">
+                          {unifiedSongs.slice(0, 5).map((song, idx) => (
+                            <SongRow
+                              key={song.id}
+                              index={idx + 1}
+                              song={song}
+                              isPlaying={isPlaying && currentSong?.id === song.id}
+                              onPlayClick={() =>
+                                handlePlaySongItem(song, unifiedSongs, idx)
+                              }
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-8 rounded-2xl bg-[#141414] border border-white/5 text-center text-spotify-sub text-sm flex-1 flex items-center justify-center">
+                          Không tìm thấy bài hát nào khớp.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Hàng 2: Nghệ sĩ phù hợp */}
+                  {unifiedArtists.length > 0 && (
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-xl sm:text-2xl font-bold text-white">
+                            Nghệ sĩ
+                          </h2>
+                          <p className="text-xs sm:text-sm text-spotify-sub mt-0.5">
+                            Nghệ sĩ khớp với từ khóa tìm kiếm
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleTabChange("artists")}
+                          className="text-xs sm:text-sm font-bold text-spotify-sub hover:text-white transition-colors cursor-pointer"
+                        >
+                          Xem tất cả
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                        {unifiedArtists.slice(0, 6).map((artist) => (
+                          <ArtistCard
+                            key={artist.id}
+                            artist={artist}
+                            onPlayClick={handlePlayArtist}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Hàng 3: Album phù hợp */}
+                  {unifiedAlbums.length > 0 && (
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-xl sm:text-2xl font-bold text-white">
+                            Album & EP
+                          </h2>
+                          <p className="text-xs sm:text-sm text-spotify-sub mt-0.5">
+                            Bộ sưu tập album và single khớp với từ khóa
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleTabChange("albums")}
+                          className="text-xs sm:text-sm font-bold text-spotify-sub hover:text-white transition-colors cursor-pointer"
+                        >
+                          Xem tất cả
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                        {unifiedAlbums.slice(0, 6).map((album) => (
+                          <AlbumCard
+                            key={album.id}
+                            album={album}
+                            onPlayClick={handlePlayAlbum}
+                          />
+                        ))}
+                      </div>
+                    </section>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* =====================================================================
+              TAB 2: BÀI HÁT (SONGS) - TÍCH HỢP API TÌM KIẾM RIÊNG LẺ
+             ===================================================================== */}
+          {activeTab === "songs" && (
+            <div className="space-y-6">
+              {/* Header điều khiển sắp xếp và thống kê */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-4 rounded-xl border border-white/5">
+                <span className="text-xs sm:text-sm text-neutral-400">
+                  Tìm thấy{" "}
+                  <strong className="text-white">
+                    {songsTotalElements.toLocaleString("vi-VN")}
+                  </strong>{" "}
+                  bài hát phù hợp
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown size={14} className="text-spotify-sub" />
+                  <span className="text-xs text-spotify-sub">Sắp xếp:</span>
+                  <select
+                    value={songSort}
+                    onChange={(e) => handleSortChange(e.target.value)}
+                    className="bg-[#202020] hover:bg-[#282828] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 outline-none cursor-pointer transition-colors"
+                  >
+                    {SONG_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-[#181818]">
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {isLoadingSongsSearch ? (
+                <div className="space-y-2">
+                  {[...Array(10)].map((_, i) => (
+                    <SkeletonRow key={i} />
+                  ))}
+                </div>
+              ) : isErrorSongsSearch ? (
+                <div className="p-8 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
+                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
+                  <h3 className="text-lg font-bold text-white mb-1">
+                    Lỗi tải danh sách bài hát
+                  </h3>
+                  <p className="text-red-200 text-sm">
+                    Không thể tìm kiếm bài hát lúc này. Vui lòng thử lại.
+                  </p>
+                </div>
+              ) : individualSongs.length === 0 ? (
+                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
+                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    Không tìm thấy bài hát nào
+                  </h3>
+                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
+                    Hãy thử từ khóa khác hoặc chuyển sang tab Tất cả để xem các gợi ý phù hợp.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="space-y-1 bg-[#141414]/40 p-2 sm:p-3 rounded-2xl border border-white/5">
+                    {individualSongs.map((song, idx) => (
+                      <SongRow
+                        key={song.id}
+                        index={pageParam * 20 + idx + 1}
+                        song={song}
+                        isPlaying={isPlaying && currentSong?.id === song.id}
+                        onPlayClick={() =>
+                          handlePlaySongItem(song, individualSongs, idx)
+                        }
+                      />
+                    ))}
+                  </div>
+
+                  {/* Phân trang */}
+                  <Pagination
+                    currentPage={pageParam}
+                    totalPages={songsTotalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* =====================================================================
+              TAB 3: NGHỆ SĨ (ARTISTS) - TÍCH HỢP API TÌM KIẾM RIÊNG LẺ
+             ===================================================================== */}
+          {activeTab === "artists" && (
+            <div className="space-y-6">
+              {/* Header điều khiển sắp xếp và thống kê */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-4 rounded-xl border border-white/5">
+                <span className="text-xs sm:text-sm text-neutral-400">
+                  Tìm thấy{" "}
+                  <strong className="text-white">
+                    {artistsTotalElements.toLocaleString("vi-VN")}
+                  </strong>{" "}
+                  nghệ sĩ phù hợp
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown size={14} className="text-spotify-sub" />
+                  <span className="text-xs text-spotify-sub">Sắp xếp:</span>
+                  <select
+                    value={artistSort}
+                    onChange={(e) => handleSortChange(e.target.value)}
+                    className="bg-[#202020] hover:bg-[#282828] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 outline-none cursor-pointer transition-colors"
+                  >
+                    {ARTIST_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-[#181818]">
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {isLoadingArtistsSearch ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {[...Array(12)].map((_, i) => (
+                    <SkeletonCard key={i} isArtist={true} />
+                  ))}
+                </div>
+              ) : isErrorArtistsSearch ? (
+                <div className="p-8 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
+                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
+                  <h3 className="text-lg font-bold text-white mb-1">
+                    Lỗi tải danh sách nghệ sĩ
+                  </h3>
+                  <p className="text-red-200 text-sm">
+                    Không thể tìm kiếm nghệ sĩ lúc này. Vui lòng thử lại.
+                  </p>
+                </div>
+              ) : individualArtists.length === 0 ? (
+                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
+                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    Không tìm thấy nghệ sĩ nào
+                  </h3>
+                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
+                    Không có nghệ sĩ nào khớp với từ khóa "{keyword}".
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                    {individualArtists.map((artist) => (
+                      <ArtistCard
+                        key={artist.id}
+                        artist={artist}
+                        onPlayClick={handlePlayArtist}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Phân trang */}
+                  <Pagination
+                    currentPage={pageParam}
+                    totalPages={artistsTotalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* =====================================================================
+              TAB 4: ALBUM (ALBUMS) - TÍCH HỢP API TÌM KIẾM RIÊNG LẺ
+             ===================================================================== */}
+          {activeTab === "albums" && (
+            <div className="space-y-6">
+              {/* Header điều khiển sắp xếp và thống kê */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-4 rounded-xl border border-white/5">
+                <span className="text-xs sm:text-sm text-neutral-400">
+                  Tìm thấy{" "}
+                  <strong className="text-white">
+                    {albumsTotalElements.toLocaleString("vi-VN")}
+                  </strong>{" "}
+                  album phù hợp
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown size={14} className="text-spotify-sub" />
+                  <span className="text-xs text-spotify-sub">Sắp xếp:</span>
+                  <select
+                    value={albumSort}
+                    onChange={(e) => handleSortChange(e.target.value)}
+                    className="bg-[#202020] hover:bg-[#282828] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 outline-none cursor-pointer transition-colors"
+                  >
+                    {ALBUM_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-[#181818]">
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {isLoadingAlbumsSearch ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {[...Array(12)].map((_, i) => (
+                    <SkeletonCard key={i} isArtist={false} />
+                  ))}
+                </div>
+              ) : isErrorAlbumsSearch ? (
+                <div className="p-8 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
+                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
+                  <h3 className="text-lg font-bold text-white mb-1">
+                    Lỗi tải danh sách album
+                  </h3>
+                  <p className="text-red-200 text-sm">
+                    Không thể tìm kiếm album lúc này. Vui lòng thử lại.
+                  </p>
+                </div>
+              ) : individualAlbums.length === 0 ? (
+                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
+                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    Không tìm thấy album nào
+                  </h3>
+                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
+                    Không có album nào khớp với từ khóa "{keyword}".
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                    {individualAlbums.map((album) => (
+                      <AlbumCard
+                        key={album.id}
+                        album={album}
+                        onPlayClick={handlePlayAlbum}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Phân trang */}
+                  <Pagination
+                    currentPage={pageParam}
+                    totalPages={albumsTotalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -470,10 +997,7 @@ export const SearchPage = () => {
             {isLoadingGenreSongs ? (
               <div className="space-y-3">
                 {[...Array(8)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-14 rounded-lg bg-[#181818] animate-pulse"
-                  />
+                  <SkeletonRow key={i} />
                 ))}
               </div>
             ) : genreSongs.length === 0 ? (
@@ -659,4 +1183,5 @@ export const SearchPage = () => {
     </div>
   );
 };
+
 export default SearchPage;
