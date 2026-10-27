@@ -19,7 +19,7 @@ export const getPublicGenres = async () => {
 
 /**
  * Lấy danh sách album công khai
- * @param {Object} params - { page, size }
+ * @param {Object} params - { keyword, page, size, sort }
  */
 export const getPublicAlbums = async (params = {}) => {
   const response = await api.get('/catalog/public/albums', { params });

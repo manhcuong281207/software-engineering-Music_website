@@ -42,9 +42,14 @@ public class PublicCatalogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AlbumResponse> getPublicAlbums(Pageable pageable) {
-        return albumRepository.findByStatus("APPROVED", pageable)
+    public Page<AlbumResponse> getPublicAlbums(String keyword, Pageable pageable) {
+        return albumRepository.findPublicAlbums(keyword, pageable)
                 .map(album -> modelMapper.map(album, AlbumResponse.class));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AlbumResponse> getPublicAlbums(Pageable pageable) {
+        return getPublicAlbums(null, pageable);
     }
 
     @Transactional(readOnly = true)

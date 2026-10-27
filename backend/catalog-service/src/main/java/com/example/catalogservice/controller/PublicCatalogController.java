@@ -77,12 +77,13 @@ public class PublicCatalogController {
 
     @GetMapping("/albums")
     public ResponseEntity<ApiResponse<Page<AlbumResponse>>> getPublicAlbums(
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Sort resolvedSort = buildSafeSort(sort, ALBUM_SORTABLE_FIELDS, "createdAt");
         Pageable pageable = PageRequest.of(page, size, resolvedSort);
-        Page<AlbumResponse> albums = publicCatalogService.getPublicAlbums(pageable);
+        Page<AlbumResponse> albums = publicCatalogService.getPublicAlbums(keyword, pageable);
         return ResponseEntity.ok(ApiResponse.success(albums, "Lấy danh sách album thành công"));
     }
 

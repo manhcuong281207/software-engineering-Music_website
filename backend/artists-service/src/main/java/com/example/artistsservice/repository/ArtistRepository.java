@@ -12,6 +12,13 @@ public interface ArtistRepository extends JpaRepository<Artist, UUID> {
     Optional<Artist> findByEmail(String email);
     boolean existsByEmail(String email);
     org.springframework.data.domain.Page<Artist> findByIsActiveTrue(org.springframework.data.domain.Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Query("SELECT a FROM Artist a " +
+           "WHERE a.isActive = true " +
+           "AND (:keyword IS NULL OR TRIM(:keyword) = '' OR " +
+           "LOWER(a.stageName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')))")
+    org.springframework.data.domain.Page<Artist> findPublicArtists(@org.springframework.data.repository.query.Param("keyword") String keyword, org.springframework.data.domain.Pageable pageable);
+
     Optional<Artist> findByIdAndIsActiveTrue(UUID id);
 
     @org.springframework.data.jpa.repository.Modifying
