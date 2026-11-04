@@ -29,10 +29,18 @@ public class FollowArtist {
     @Column(name = "artist_name", nullable = false)
     private String artistName;
 
-    @Column(name = "avatar")
-    private String avatar;
+    @Column(name = "avatar_url")
+    private String avatarUrl;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    public String getAvatar() {
+        return avatarUrl;
+    }
+
+    public void setAvatar(String avatar) {
+        this.avatarUrl = avatar;
+    }
 }

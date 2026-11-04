@@ -1,3 +1,6 @@
+-- Enable Extensions
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
 -- Create Schemas
 CREATE SCHEMA IF NOT EXISTS mc_music_users_schema;
 CREATE SCHEMA IF NOT EXISTS mc_music_artists_schema;
@@ -156,6 +159,7 @@ CREATE TABLE IF NOT EXISTS albums (
     description TEXT,
     cover_image VARCHAR(500),
     release_date DATE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     status VARCHAR(50) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'TAKEDOWN')),
     like_count INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -176,16 +180,17 @@ CREATE TABLE IF NOT EXISTS songs (
     play_count INT DEFAULT 0,
     like_count INT DEFAULT 0,
     status VARCHAR(50) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'TAKEDOWN')),
-    is_deleted BOOLEAN DEFAULT FALSE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS song_artists (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
     artist_id UUID NOT NULL,
     artist_name VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL,
-    PRIMARY KEY (song_id, artist_id)
+    UNIQUE (song_id, artist_id)
 );
 
 CREATE TABLE IF NOT EXISTS song_genres (
@@ -195,7 +200,8 @@ CREATE TABLE IF NOT EXISTS song_genres (
 );
 
 CREATE TABLE IF NOT EXISTS lyrics (
-    song_id UUID PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    song_id UUID NOT NULL UNIQUE REFERENCES songs(id) ON DELETE CASCADE,
     content TEXT,
     synced_content TEXT,
     language VARCHAR(10)
@@ -211,11 +217,12 @@ CREATE TABLE IF NOT EXISTS system_playlists (
 );
 
 CREATE TABLE IF NOT EXISTS system_playlist_songs (
+    id BIGSERIAL PRIMARY KEY,
     playlist_id UUID NOT NULL REFERENCES system_playlists(id) ON DELETE CASCADE,
     song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
     position_order INT NOT NULL,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (playlist_id, song_id)
+    UNIQUE (playlist_id, song_id)
 );
 
 -- ==========================================
@@ -247,8 +254,22 @@ SET search_path TO public;
 SET search_path TO mc_music_admin_schema;
 
 INSERT INTO admins (email, password_hash, full_name, role) 
-VALUES ('admin@mcmusic.com', '$2a$10$jojukDg2MtWNHxZOPDVDkuTQEBDCZRftfII6fcSjbFv.szo9lTcEC', 'System Admin', 'SUPER_ADMIN')
+VALUES ('admin@mcmusic.com', '<THAY_THE_BANG_CHUOI_BCRYPT_SINH_RA_TU_GenerateHashTest>', 'System Admin', 'SUPER_ADMIN')
 ON CONFLICT DO NOTHING;
+
+-- Reset search_path to default
+SET search_path TO public;
+
+-- ==========================================
+-- 7. Migration: Backfill & Enforce NOT NULL for is_deleted
+-- ==========================================
+UPDATE mc_music_catalog_schema.albums SET is_deleted = FALSE WHERE is_deleted IS NULL;
+ALTER TABLE mc_music_catalog_schema.albums ALTER COLUMN is_deleted SET DEFAULT FALSE;
+ALTER TABLE mc_music_catalog_schema.albums ALTER COLUMN is_deleted SET NOT NULL;
+
+UPDATE mc_music_catalog_schema.songs SET is_deleted = FALSE WHERE is_deleted IS NULL;
+ALTER TABLE mc_music_catalog_schema.songs ALTER COLUMN is_deleted SET DEFAULT FALSE;
+ALTER TABLE mc_music_catalog_schema.songs ALTER COLUMN is_deleted SET NOT NULL;
 
 -- Reset search_path to default
 SET search_path TO public;
