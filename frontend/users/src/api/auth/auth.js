@@ -1,6 +1,21 @@
 import api from '#/lib/axios';
 
 /**
+ * Trích xuất thông báo lỗi thân thiện từ phản hồi API
+ * @param {any} error
+ * @param {string} defaultMessage
+ * @returns {string}
+ */
+export const getErrorMessage = (error, defaultMessage = 'Đã có lỗi xảy ra. Vui lòng thử lại.') => {
+  if (!error) return defaultMessage;
+  if (typeof error === 'string') return error;
+  if (error.response?.data?.message) return error.response.data.message;
+  if (error.response?.data?.error) return error.response.data.error;
+  if (error.message) return error.message;
+  return defaultMessage;
+};
+
+/**
  * Đăng nhập người dùng
  * @param {Object} credentials - { email, password }
  * @returns {Promise<Object>} ApiResponse chứa AuthResponse (userId, email, fullName, accessToken, refreshToken)
