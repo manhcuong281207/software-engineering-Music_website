@@ -59,15 +59,13 @@ export const ArtistLayout = () => {
       to: "/songs",
       label: "Quản lý bài hát",
       icon: Music2,
-      badge: "Giai đoạn tiếp theo",
-      disabled: true,
+      end: false,
     },
     {
       to: "/albums",
       label: "Quản lý Album",
       icon: Disc3,
-      badge: "Giai đoạn tiếp theo",
-      disabled: true,
+      end: false,
     },
   ];
 
@@ -93,25 +91,6 @@ export const ArtistLayout = () => {
           <nav className="mt-8 space-y-1.5">
             {navLinks.map((item) => {
               const Icon = item.icon;
-
-              if (item.disabled) {
-                return (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between rounded-xl px-3.5 py-3 text-sm font-medium text-neutral-500 cursor-not-allowed select-none opacity-60"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className="h-5 w-5" />
-                      <span>{item.label}</span>
-                    </div>
-                    {item.badge && (
-                      <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                );
-              }
 
               return (
                 <NavLink
@@ -239,24 +218,22 @@ export const ArtistLayout = () => {
         {isMobileMenuOpen && (
           <div className="border-b border-neutral-800 bg-[#141418] p-4 md:hidden animate-fadeIn">
             <nav className="space-y-2">
-              {navLinks
-                .filter((i) => !i.disabled)
-                .map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold ${
-                        isActive ? "bg-[#fa2d48] text-white" : "text-neutral-400"
-                      }`
-                    }
-                  >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
+              {navLinks.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold ${
+                      isActive ? "bg-[#fa2d48] text-white" : "text-neutral-400"
+                    }`
+                  }
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
               <button
                 onClick={() => {
                   setIsMobileMenuOpen(false);
@@ -287,4 +264,3 @@ export const ArtistLayout = () => {
     </div>
   );
 };
-

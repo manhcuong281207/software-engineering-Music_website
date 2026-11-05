@@ -4,6 +4,8 @@ import { Routes, Route } from "react-router";
 import { ArtistLayout } from "../layouts/ArtistLayout";
 import { DashboardPage } from "../pages/DashboardPage";
 import { ProfilePage } from "../pages/ProfilePage";
+import { SongsPage } from "../pages/SongsPage";
+import { AlbumsPage } from "../pages/AlbumsPage";
 import { LoginPage } from "../pages/LoginPage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -19,6 +21,8 @@ export const AppRoutes = () => {
         <Route element={<ArtistLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/songs" element={<SongsPage />} />
+          <Route path="/albums" element={<AlbumsPage />} />
         </Route>
       </Route>
 
@@ -35,4 +39,3 @@ export const AppRoutes = () => {
 };
 
 export default AppRoutes;
-
