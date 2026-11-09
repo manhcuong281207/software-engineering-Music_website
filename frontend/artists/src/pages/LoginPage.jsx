@@ -3,39 +3,37 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Link, useNavigate, useLocation } from "react-router";
-import { Radio, Mail, Lock, Eye, EyeOff, Loader2, Sparkles, ArrowRight } from "lucide-react";
+import { Music2, Mail, Lock, Eye, EyeOff, Radio, Disc3, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { loginApi, getErrorMessage } from "../api/auth";
-import { getArtistProfileApi } from "../api/artist";
-import { useArtistAuthStore } from "../store/useArtistAuthStore";
-import { Button } from "../components/ui/Button";
+import { loginApi } from "#/api/auth";
+import { useAuthStore } from "#/store/useAuthStore";
+import { Button } from "#/components/ui/Button";
 
 const loginSchema = z.object({
   email: z
     .string()
     .min(1, { message: "Email không được để trống" })
-    .email({ message: "Địa chỉ email không đúng định dạng" }),
+    .email({ message: "Email không đúng định dạng" }),
   password: z
     .string()
     .min(6, { message: "Mật khẩu phải từ 6 ký tự trở lên" }),
-  rememberMe: z.boolean().optional(),
 });
 
 export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, login, updateArtist } = useArtistAuthStore();
+  const { isAuthenticated, login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
-  const [serverError, setServerError] = useState("");
 
   const searchParams = new URLSearchParams(location.search);
-  const redirectUrl = searchParams.get("redirect") || "/";
+  const redirectUrl = searchParams.get("redirect") || location.state?.from || "/";
 
+  // Nếu đã đăng nhập, tự động chuyển về trang quản trị
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(redirectUrl, { replace: true });
+      navigate("/", { replace: true });
     }
-  }, [isAuthenticated, navigate, redirectUrl]);
+  }, [isAuthenticated, navigate]);
 
   const {
     register,
@@ -43,159 +41,208 @@ export const LoginPage = () => {
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      rememberMe: true,
-    },
   });
 
   const onSubmit = async (data) => {
-    setServerError("");
     try {
       const response = await loginApi({
-        email: data.email.trim(),
+        email: data.email.trim().toLowerCase(),
         password: data.password,
       });
 
-      const authData = response?.data;
-      if (!authData?.accessToken) {
-        throw new Error("Phản hồi đăng nhập không hợp lệ");
+      if (response?.data) {
+        login(response.data);
+        toast.success("Đăng nhập thành công!", {
+          description: `Chào mừng ${response.data.stageName || "Nghệ sĩ"} đến với Artist Studio!`,
+        });
+        navigate(redirectUrl, { replace: true });
       }
-
-      // Lưu thông tin cơ bản từ AuthResponse
-      const basicArtist = {
-        id: authData.artistId,
-        email: authData.email,
-        stageName: authData.stageName,
-      };
-
-      login(authData.accessToken, authData.refreshToken, basicArtist);
-
-      // Cố gắng fetch profile đầy đủ (avatar, cover, bio, followerCount)
-      try {
-        const profileRes = await getArtistProfileApi();
-        if (profileRes?.data) {
-          updateArtist(profileRes.data);
-        }
-      } catch {
-        // ignore nếu fetch ngay lập tức bị chậm
-      }
-
-      toast.success(`Chào mừng trở lại, ${authData.stageName}!`);
-      navigate(redirectUrl, { replace: true });
     } catch (err) {
-      const message = getErrorMessage(err, "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.");
-      setServerError(message);
-      toast.error(message);
+      console.error("Lỗi đăng nhập:", err);
+      const serverMessage =
+        err.response?.data?.message ||
+        "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.";
+      toast.error("Đăng nhập thất bại", {
+        description: serverMessage,
+      });
     }
   };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-[#0c0c0e] px-4 py-12 text-white">
-      <div className="w-full max-w-md space-y-8 rounded-3xl border border-neutral-800/80 bg-[#141418] p-8 shadow-2xl animate-fadeIn">
-        {/* Logo & Heading */}
-        <div className="text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#fa2d48] to-[#ff6b81] shadow-xl shadow-[#fa2d48]/25 mb-4">
-            <Radio className="h-8 w-8 text-white" />
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-[#0a0a0a] text-white">
+      {/* ── CỘT TRÁI: HERO BRANDING ARTIST STUDIO ── */}
+      <div className="hidden lg:flex flex-col items-center justify-center p-12 relative overflow-hidden bg-gradient-to-br from-[#1a080d] via-[#100d0e] to-[#0a0a0a] border-r border-neutral-900">
+        {/* Glow hiệu ứng đỏ neon */}
+        <div className="absolute w-[480px] h-[480px] bg-[#fa2d48]/15 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute -top-24 -left-24 w-72 h-72 bg-[#fa2d48]/10 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center max-w-lg text-center">
+          {/* Logo Brand */}
+          <div className="flex items-center gap-3.5 mb-8">
+            <div className="w-13 h-13 rounded-2xl bg-[#fa2d48] flex items-center justify-center shadow-[0_0_30px_rgba(250,45,72,0.45)]">
+              <Music2 size={30} className="text-white" />
+            </div>
+            <div className="text-left">
+              <span className="text-2xl font-black text-white tracking-wider block">
+                MC MUSIC
+              </span>
+              <span className="text-xs uppercase tracking-[0.25em] text-[#fa2d48] font-bold">
+                Artist Studio
+              </span>
+            </div>
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#fa2d48]/10 px-3 py-1 text-xs font-bold text-[#fa2d48] border border-[#fa2d48]/20 mb-2">
-            <Sparkles className="h-3 w-3" />
-            Dành cho Nghệ sĩ
-          </div>
-          <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
-            Đăng nhập Nghệ sĩ
+
+          {/* Headline */}
+          <h2 className="text-4xl lg:text-5xl font-black text-white text-center leading-[1.15] mb-6 tracking-tight">
+            Nơi tôn vinh tác phẩm <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#fa2d48] to-[#ff6b81]">
+              của riêng bạn.
+            </span>
           </h2>
-          <p className="mt-2 text-xs text-neutral-400">
-            Quản lý tác phẩm, theo dõi lượt nghe và kết nối với cộng đồng người hâm mộ MC Music.
+
+          {/* Description */}
+          <p className="text-spotify-sub text-center text-sm sm:text-base leading-relaxed max-w-md mb-8">
+            Cổng thông tin chuyên biệt dành cho Nghệ sĩ: phát hành bài hát, tạo album, theo dõi thống kê lượt nghe và kết nối trực tiếp với hàng triệu thính giả.
+          </p>
+
+          {/* Feature Highlights */}
+          <div className="grid grid-cols-3 gap-4 w-full pt-6 border-t border-neutral-800/80">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col items-center gap-2">
+              <Disc3 size={20} className="text-[#fa2d48]" />
+              <span className="text-xs font-semibold text-neutral-300">Phát hành Album</span>
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col items-center gap-2">
+              <Radio size={20} className="text-[#fa2d48]" />
+              <span className="text-xs font-semibold text-neutral-300">Nghe thử MP3</span>
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col items-center gap-2">
+              <Sparkles size={20} className="text-[#fa2d48]" />
+              <span className="text-xs font-semibold text-neutral-300">Thống kê Real-time</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── CỘT PHẢI: FORM ĐĂNG NHẬP ── */}
+      <div className="flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-12 max-w-lg mx-auto w-full relative">
+        {/* Mobile Brand Header */}
+        <div className="flex lg:hidden items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-[#fa2d48] flex items-center justify-center shadow-lg">
+            <Music2 size={22} className="text-white" />
+          </div>
+          <div>
+            <span className="text-lg font-bold text-white tracking-wide block">
+              MC Music
+            </span>
+            <span className="text-[10px] uppercase tracking-widest text-[#fa2d48] font-bold">
+              Artist Studio
+            </span>
+          </div>
+        </div>
+
+        {/* Tiêu đề & Subtitle */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-extrabold text-white mb-2">Đăng nhập Studio</h1>
+          <p className="text-spotify-sub text-sm">
+            Chưa có tài khoản nghệ danh?{" "}
+            <Link
+              to="/register"
+              className="text-[#fa2d48] font-bold hover:underline transition-colors ml-1"
+            >
+              Đăng ký ngay
+            </Link>
           </p>
         </div>
 
-        {serverError && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-400">
-            {serverError}
-          </div>
-        )}
-
+        {/* Form đăng nhập */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           {/* Email */}
           <div>
-            <label className="block text-xs font-semibold text-neutral-300">
-              Địa chỉ Email
+            <label className="block text-xs font-semibold text-neutral-300 mb-2">
+              Email đăng nhập <span className="text-[#fa2d48]">*</span>
             </label>
-            <div className="relative mt-1.5">
-              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+            <div className="relative flex items-center">
+              <Mail size={18} className="absolute left-3.5 text-neutral-500" />
               <input
-                type="email"
                 {...register("email")}
-                placeholder="artist@mcmusic.com"
-                className="w-full rounded-xl border border-neutral-700 bg-neutral-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-neutral-500 focus:border-[#fa2d48] focus:outline-none focus:ring-1 focus:ring-[#fa2d48]"
+                type="email"
+                placeholder="artist@example.com"
+                className={`w-full bg-[#1e1e1e] hover:bg-[#252525] focus:bg-[#252525] text-white rounded-xl pl-10 pr-4 py-3 text-sm outline-none border transition-all ${
+                  errors.email
+                    ? "border-rose-500 focus:border-rose-500"
+                    : "border-neutral-800 focus:border-white/80"
+                } placeholder:text-neutral-500`}
               />
             </div>
             {errors.email && (
-              <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>
+              <p className="text-rose-400 text-xs mt-1.5 font-medium">
+                {errors.email.message}
+              </p>
             )}
           </div>
 
           {/* Mật khẩu */}
           <div>
-            <label className="block text-xs font-semibold text-neutral-300">
-              Mật khẩu
+            <label className="block text-xs font-semibold text-neutral-300 mb-2">
+              Mật khẩu <span className="text-[#fa2d48]">*</span>
             </label>
-            <div className="relative mt-1.5">
-              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+            <div className="relative flex items-center">
+              <Lock size={18} className="absolute left-3.5 text-neutral-500" />
               <input
-                type={showPassword ? "text" : "password"}
                 {...register("password")}
+                type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-neutral-700 bg-neutral-900/80 py-2.5 pl-10 pr-10 text-sm text-white placeholder-neutral-500 focus:border-[#fa2d48] focus:outline-none focus:ring-1 focus:ring-[#fa2d48]"
+                className={`w-full bg-[#1e1e1e] hover:bg-[#252525] focus:bg-[#252525] text-white rounded-xl pl-10 pr-11 py-3 text-sm outline-none border transition-all ${
+                  errors.password
+                    ? "border-rose-500 focus:border-rose-500"
+                    : "border-neutral-800 focus:border-white/80"
+                } placeholder:text-neutral-500`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+                className="absolute right-3.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
             {errors.password && (
-              <p className="mt-1 text-xs text-red-400">{errors.password.message}</p>
+              <p className="text-rose-400 text-xs mt-1.5 font-medium">
+                {errors.password.message}
+              </p>
             )}
           </div>
 
-          {/* Submit Button */}
+          {/* Nút Đăng nhập */}
           <Button
             type="submit"
             variant="primary"
-            size="md"
-            disabled={isSubmitting}
-            className="w-full font-bold gap-2"
+            size="lg"
+            isLoading={isSubmitting}
+            className="w-full mt-4"
           >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Đang xác thực...</span>
-              </>
-            ) : (
-              <>
-                <span>Đăng nhập</span>
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
+            Đăng nhập Studio
           </Button>
         </form>
 
-        <div className="text-center text-xs text-neutral-400">
-          Chưa có tài khoản nghệ sĩ?{" "}
-          <Link
-            to="/register"
-            className="font-bold text-[#fa2d48] hover:underline"
-          >
-            Đăng ký làm nghệ sĩ ngay
-          </Link>
+        {/* Divider */}
+        <div className="relative flex items-center justify-center my-7">
+          <div className="border-t border-neutral-850 w-full" />
+          <span className="bg-[#0a0a0a] px-3 text-xs text-neutral-500 uppercase tracking-wider absolute">
+            hoặc
+          </span>
         </div>
+
+        {/* Nút Đăng ký tài khoản */}
+        <Link to="/register">
+          <Button variant="secondary" size="md" className="w-full">
+            Đăng ký tài khoản Nghệ sĩ mới
+          </Button>
+        </Link>
       </div>
     </div>
   );
 };
 
+export default LoginPage;
