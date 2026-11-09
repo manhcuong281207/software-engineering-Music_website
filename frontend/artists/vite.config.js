@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5172,
     proxy: {
       // Chuyển tiếp toàn bộ /api/* tới API Gateway (port 8686)
       '/api': {

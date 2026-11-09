@@ -1,50 +1,48 @@
-import api from "#/lib/axios";
-
-/**
- * Trích xuất thông báo lỗi từ phản hồi server
- */
-export const getErrorMessage = (error, defaultMessage = "Đã có lỗi xảy ra. Vui lòng thử lại.") => {
-  if (!error) return defaultMessage;
-  if (typeof error === "string") return error;
-  if (error.response?.data?.message) return error.response.data.message;
-  if (error.response?.data?.error) return error.response.data.error;
-  if (error.message) return error.message;
-  return defaultMessage;
-};
+import api from '#/lib/axios';
 
 /**
  * Đăng nhập tài khoản Nghệ sĩ
  * @param {Object} credentials - { email, password }
+ * @returns {Promise<Object>} ApiResponse chứa AuthResponse (artistId, email, stageName, accessToken, refreshToken)
  */
 export const loginApi = async (credentials) => {
-  const response = await api.post("/artist/auth/login", credentials);
+  const response = await api.post('/artist/auth/login', credentials);
   return response.data;
 };
 
 /**
- * Đăng ký tài khoản Nghệ sĩ
- * @param {Object} data - { email, password, stageName }
+ * Đăng ký tài khoản Nghệ sĩ mới
+ * @param {Object} data - { email, password, stageName, biography }
+ * @returns {Promise<Object>} ApiResponse chứa AuthResponse
  */
 export const registerApi = async (data) => {
-  const response = await api.post("/artist/auth/register", data);
+  const response = await api.post('/artist/auth/register', data);
   return response.data;
 };
 
 /**
- * Làm mới Access Token
+ * Làm mới Access Token của Nghệ sĩ
  * @param {string} refreshToken
+ * @returns {Promise<Object>} ApiResponse chứa TokenRefreshResponse (accessToken, refreshToken)
  */
 export const refreshTokenApi = async (refreshToken) => {
-  const response = await api.post("/artist/auth/refresh", { refreshToken });
+  const response = await api.post('/artist/auth/refresh', { refreshToken });
   return response.data;
 };
 
 /**
- * Đăng xuất Nghệ sĩ
+ * Đăng xuất tài khoản Nghệ sĩ (thu hồi refresh token ở backend)
  * @param {string} refreshToken
+ * @returns {Promise<Object>} ApiResponse<Void>
  */
 export const logoutApi = async (refreshToken) => {
-  const response = await api.post("/artist/auth/logout", { refreshToken });
+  const response = await api.post('/artist/auth/logout', { refreshToken });
   return response.data;
 };
 
+export {
+  loginApi as login,
+  registerApi as register,
+  logoutApi as logout,
+  refreshTokenApi as refreshToken,
+};

@@ -1,101 +1,50 @@
-import api from "#/lib/axios";
-
-// ==========================================
-// 1. QUẢN LÝ BÀI HÁT (SONGS)
-// ==========================================
+import api from '#/lib/axios';
 
 /**
- * Đăng tải bài hát mới (Audio + Cover + Metadata)
- * Endpoint: POST /api/catalog/artist/songs
- * @param {FormData} formData
- * @returns {Promise<Object>} ApiResponse<SongResponse>
+ * ─── PHÂN HỆ QUẢN LÝ BÀI HÁT (SONGS) ─────────────────────────────────────────
  */
-export const uploadSongApi = async (formData) => {
-  const response = await api.post("/catalog/artist/songs", formData, {
+
+/**
+ * Lấy danh sách bài hát do Nghệ sĩ hiện tại sở hữu
+ * @param {Object} params - { page, size }
+ * @returns {Promise<Object>} ApiResponse chứa Page<SongResponse>
+ */
+export const getMySongsApi = async (params = { page: 0, size: 10 }) => {
+  const response = await api.get('/catalog/artist/songs', { params });
+  return response.data;
+};
+
+/**
+ * Đăng tải bài hát mới lên Catalog Service (upload file audio và ảnh cover lên Cloudinary)
+ * @param {FormData} formData - Chứa title, audioFile, coverImage, albumId, explicit, genreIds...
+ * @param {Function} [onUploadProgress] - Callback theo dõi tiến trình upload (0% - 100%)
+ * @returns {Promise<Object>} ApiResponse chứa SongResponse
+ */
+export const uploadSongApi = async (formData, onUploadProgress) => {
+  const response = await api.post('/catalog/artist/songs', formData, {
     headers: {
-      "Content-Type": "multipart/form-data",
+      'Content-Type': 'multipart/form-data',
     },
+    onUploadProgress,
   });
   return response.data;
 };
 
 /**
- * Lấy danh sách bài hát do chính nghệ sĩ đăng tải
- * Endpoint: GET /api/catalog/artist/songs
- * @param {Object} params - { status, isDeleted, page, size }
- * @returns {Promise<Object>} ApiResponse<Page<SongResponse>>
- */
-export const getArtistSongsApi = async (params = {}) => {
-  const response = await api.get("/catalog/artist/songs", { params });
-  return response.data;
-};
-
-/**
- * Chỉnh sửa bài hát (đổi tên, ảnh bìa, thể loại, album, cờ explicit)
- * Endpoint: PUT /api/catalog/artist/songs/{id}
- * @param {string} songId
- * @param {FormData} formData
- * @returns {Promise<Object>} ApiResponse<SongResponse>
- */
-export const updateSongApi = async (songId, formData) => {
-  const response = await api.put(`/catalog/artist/songs/${songId}`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return response.data;
-};
-
-/**
- * Xóa mềm bài hát vào thùng rác (is_deleted = true)
- * Endpoint: DELETE /api/catalog/artist/songs/{id}
- * @param {string} songId
- * @returns {Promise<Object>} ApiResponse<Void>
- */
-export const deleteSongApi = async (songId) => {
-  const response = await api.delete(`/catalog/artist/songs/${songId}`);
-  return response.data;
-};
-
-/**
- * Khôi phục bài hát từ thùng rác (is_deleted = false)
- * Endpoint: PUT /api/catalog/artist/songs/{id}/restore
- * @param {string} songId
- * @returns {Promise<Object>} ApiResponse<SongResponse>
- */
-export const restoreSongApi = async (songId) => {
-  const response = await api.put(`/catalog/artist/songs/${songId}/restore`);
-  return response.data;
-};
-
-/**
- * Thêm mới hoặc cập nhật lời bài hát
- * Endpoint: POST /api/catalog/artist/songs/{songId}/lyrics
- * @param {string} songId
+ * Cập nhật lời bài hát cho một bài hát cụ thể
+ * @param {string} songId - UUID bài hát
  * @param {Object} data - { content, language }
  * @returns {Promise<Object>} ApiResponse<Void>
  */
-export const updateSongLyricsApi = async (songId, data) => {
+export const updateLyricsApi = async (songId, data) => {
   const response = await api.post(`/catalog/artist/songs/${songId}/lyrics`, data);
   return response.data;
 };
 
 /**
- * Lấy lời bài hát công khai
- * Endpoint: GET /api/catalog/public/songs/{songId}/lyrics
- * @param {string} songId
- * @returns {Promise<Object>} ApiResponse<LyricsResponse>
- */
-export const getSongLyricsApi = async (songId) => {
-  const response = await api.get(`/catalog/public/songs/${songId}/lyrics`);
-  return response.data;
-};
-
-/**
- * Thêm nghệ sĩ hợp tác (Feat / Producer) vào bài hát
- * Endpoint: POST /api/catalog/artist/songs/{songId}/artists
- * @param {string} songId
- * @param {Object} data - { artistId, role } - role: FEATURED | PRODUCER
+ * Thêm nghệ sĩ phụ (Feat / Producer) vào bài hát
+ * @param {string} songId - UUID bài hát
+ * @param {Object} data - { artistId, role }
  * @returns {Promise<Object>} ApiResponse<Void>
  */
 export const addSongArtistApi = async (songId, data) => {
@@ -104,89 +53,36 @@ export const addSongArtistApi = async (songId, data) => {
 };
 
 /**
- * Xóa nghệ sĩ phụ / feat khỏi bài hát
- * Endpoint: DELETE /api/catalog/artist/songs/{songId}/artists/{artistId}
- * @param {string} songId
- * @param {string} artistId
- * @returns {Promise<Object>} ApiResponse<Void>
+ * ─── PHÂN HỆ QUẢN LÝ ALBUM (ALBUMS) ──────────────────────────────────────────
  */
-export const removeSongArtistApi = async (songId, artistId) => {
-  const response = await api.delete(`/catalog/artist/songs/${songId}/artists/${artistId}`);
+
+/**
+ * Lấy danh sách Album do Nghệ sĩ hiện tại sở hữu
+ * @param {Object} params - { page, size }
+ * @returns {Promise<Object>} ApiResponse chứa Page<AlbumResponse>
+ */
+export const getMyAlbumsApi = async (params = { page: 0, size: 10 }) => {
+  const response = await api.get('/catalog/artist/albums', { params });
   return response.data;
 };
 
-// ==========================================
-// 2. QUẢN LÝ ALBUM (ALBUMS)
-// ==========================================
-
 /**
- * Tạo Album mới (ALBUM / EP / SINGLE)
- * Endpoint: POST /api/catalog/artist/albums
- * @param {FormData} formData
- * @returns {Promise<Object>} ApiResponse<AlbumResponse>
+ * Tạo Album / EP / Single mới
+ * @param {FormData} formData - Chứa title, albumType, description, coverImage, releaseDate
+ * @returns {Promise<Object>} ApiResponse chứa AlbumResponse
  */
 export const createAlbumApi = async (formData) => {
-  const response = await api.post("/catalog/artist/albums", formData, {
+  const response = await api.post('/catalog/artist/albums', formData, {
     headers: {
-      "Content-Type": "multipart/form-data",
+      'Content-Type': 'multipart/form-data',
     },
   });
   return response.data;
 };
 
 /**
- * Lấy danh sách Album do chính nghệ sĩ tạo
- * Endpoint: GET /api/catalog/artist/albums
- * @param {Object} params - { isDeleted, page, size }
- * @returns {Promise<Object>} ApiResponse<Page<AlbumResponse>>
- */
-export const getArtistAlbumsApi = async (params = {}) => {
-  const response = await api.get("/catalog/artist/albums", { params });
-  return response.data;
-};
-
-/**
- * Chỉnh sửa thông tin Album
- * Endpoint: PUT /api/catalog/artist/albums/{id}
- * @param {string} albumId
- * @param {FormData} formData
- * @returns {Promise<Object>} ApiResponse<AlbumResponse>
- */
-export const updateAlbumApi = async (albumId, formData) => {
-  const response = await api.put(`/catalog/artist/albums/${albumId}`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return response.data;
-};
-
-/**
- * Xóa mềm Album (cascade xóa mềm toàn bộ bài hát trong album)
- * Endpoint: DELETE /api/catalog/artist/albums/{id}
- * @param {string} albumId
- * @returns {Promise<Object>} ApiResponse<Void>
- */
-export const deleteAlbumApi = async (albumId) => {
-  const response = await api.delete(`/catalog/artist/albums/${albumId}`);
-  return response.data;
-};
-
-/**
- * Khôi phục Album từ thùng rác (cascade khôi phục toàn bộ bài hát)
- * Endpoint: PUT /api/catalog/artist/albums/{id}/restore
- * @param {string} albumId
- * @returns {Promise<Object>} ApiResponse<AlbumResponse>
- */
-export const restoreAlbumApi = async (albumId) => {
-  const response = await api.put(`/catalog/artist/albums/${albumId}/restore`);
-  return response.data;
-};
-
-/**
- * Đưa bài hát đã đăng tải vào một Album
- * Endpoint: POST /api/catalog/artist/albums/{albumId}/songs
- * @param {string} albumId
+ * Thêm một bài hát vào album
+ * @param {string} albumId - UUID album
  * @param {Object} data - { songId, trackNumber }
  * @returns {Promise<Object>} ApiResponse<Void>
  */
@@ -196,62 +92,60 @@ export const addSongToAlbumApi = async (albumId, data) => {
 };
 
 /**
- * Gỡ bài hát khỏi Album (chuyển thành bài lẻ Single)
- * Endpoint: DELETE /api/catalog/artist/albums/{albumId}/songs/{songId}
- * @param {string} albumId
- * @param {string} songId
- * @returns {Promise<Object>} ApiResponse<Void>
- */
-export const removeSongFromAlbumApi = async (albumId, songId) => {
-  const response = await api.delete(`/catalog/artist/albums/${albumId}/songs/${songId}`);
-  return response.data;
-};
-
-/**
- * Đổi số thứ tự track của các bài hát trong Album
- * Endpoint: PUT /api/catalog/artist/albums/{albumId}/songs/reorder
- * @param {string} albumId
+ * Cập nhật lại thứ tự các bài hát trong album
+ * @param {string} albumId - UUID album
  * @param {Object} data - { songOrders: [{ songId, trackNumber }] }
  * @returns {Promise<Object>} ApiResponse<Void>
  */
-export const reorderAlbumSongsApi = async (albumId, data) => {
+export const reorderSongsInAlbumApi = async (albumId, data) => {
   const response = await api.put(`/catalog/artist/albums/${albumId}/songs/reorder`, data);
   return response.data;
 };
 
 /**
- * Lấy danh sách bài hát trong Album
- * Endpoint: GET /api/catalog/public/albums/{albumId}/songs
- * @param {string} albumId
- * @param {Object} params - { sort, page, size }
- * @returns {Promise<Object>} ApiResponse<Page<SongResponse>>
+ * ─── THỂ LOẠI & DỮ LIỆU CÔNG KHAI (GENRES & PUBLIC CATALOG) ──────────────────
  */
-export const getAlbumSongsApi = async (albumId, params = {}) => {
+
+/**
+ * Lấy danh sách toàn bộ các thể loại âm nhạc để chọn khi tải bài hát lên
+ * @returns {Promise<Object>} ApiResponse chứa List<GenreResponse> (id, name, coverImage)
+ */
+export const getPublicGenresApi = async () => {
+  const response = await api.get('/catalog/public/genres');
+  return response.data;
+};
+
+/**
+ * Lấy danh sách bài hát thuộc một Album
+ * @param {string} albumId - UUID album
+ * @param {Object} params - { page, size, sort }
+ * @returns {Promise<Object>} ApiResponse chứa Page<SongResponse>
+ */
+export const getSongsByAlbumApi = async (albumId, params = { page: 0, size: 50 }) => {
   const response = await api.get(`/catalog/public/albums/${albumId}/songs`, { params });
   return response.data;
 };
 
-// ==========================================
-// 3. PUBLIC UTILITIES
-// ==========================================
-
 /**
- * Lấy danh sách tất cả các thể loại âm nhạc công khai
- * Endpoint: GET /api/catalog/public/genres
- * @returns {Promise<Object>} ApiResponse<List<GenreResponse>>
+ * Lấy chi tiết lời bài hát theo songId
+ * @param {string} songId - UUID bài hát
+ * @returns {Promise<Object>} ApiResponse chứa LyricsResponse (id, songId, content, language)
  */
-export const getPublicGenresApi = async () => {
-  const response = await api.get("/catalog/public/genres");
+export const getSongLyricsApi = async (songId) => {
+  const response = await api.get(`/catalog/public/songs/${songId}/lyrics`);
   return response.data;
 };
 
-/**
- * Lấy danh sách nghệ sĩ công khai (dùng để tìm kiếm khi Feat)
- * Endpoint: GET /api/artist/public/artists
- * @param {Object} params - { keyword, page, size, sort }
- * @returns {Promise<Object>} ApiResponse<Page<ArtistPublicResponse>>
- */
-export const getPublicArtistsApi = async (params = {}) => {
-  const response = await api.get("/artist/public/artists", { params });
-  return response.data;
+export {
+  getMySongsApi as getSongs,
+  uploadSongApi as uploadSong,
+  updateLyricsApi as updateLyrics,
+  addSongArtistApi as addFeaturedArtist,
+  getMyAlbumsApi as getAlbums,
+  createAlbumApi as createAlbum,
+  addSongToAlbumApi as addSongToAlbum,
+  reorderSongsInAlbumApi as reorderAlbumSongs,
+  getPublicGenresApi as getGenres,
+  getSongsByAlbumApi as getAlbumSongs,
+  getSongLyricsApi as getLyrics,
 };
