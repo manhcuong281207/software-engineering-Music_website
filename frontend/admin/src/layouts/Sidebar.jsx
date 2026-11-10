@@ -8,7 +8,10 @@ import {
   Disc3,
   Shield,
   X,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
+import { useAuthStore } from "../store/useAuthStore";
 
 const NAV_ITEMS = [
   {
@@ -39,7 +42,9 @@ const NAV_ITEMS = [
   },
 ];
 
-export const Sidebar = ({ isOpen, onClose }) => {
+export const Sidebar = ({ isOpen, onClose, onOpenLogoutModal }) => {
+  const { admin } = useAuthStore();
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -57,7 +62,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
         }`}
       >
         {/* Logo & Header */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-neutral-800/70">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-neutral-800/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#fa2d48] flex items-center justify-center shadow-[0_2px_12px_rgba(250,45,72,0.4)]">
               <Shield size={20} className="text-white" />
@@ -74,7 +79,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
 
           <button
             onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            className="lg:hidden p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -109,11 +114,34 @@ export const Sidebar = ({ isOpen, onClose }) => {
           })}
         </div>
 
-        {/* Footer Info */}
-        <div className="p-4 border-t border-neutral-800/70 text-center">
-          <p className="text-[11px] text-neutral-500">
-            MC Music Admin Platform v1.0
-          </p>
+        {/* Admin Card & Quick Logout Footer */}
+        <div className="p-3 border-t border-neutral-800/70 shrink-0 space-y-2">
+          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-neutral-900/60 border border-neutral-800">
+            <div className="w-8 h-8 rounded-full bg-[#fa2d48]/20 text-[#fa2d48] flex items-center justify-center font-bold text-xs shrink-0">
+              {admin?.fullName ? admin.fullName.charAt(0).toUpperCase() : "A"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-white truncate">
+                {admin?.fullName || "Quản trị viên"}
+              </div>
+              <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1">
+                <ShieldCheck size={10} className="text-[#fa2d48]" />
+                <span>{admin?.role || "SUPER_ADMIN"}</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (onClose) onClose();
+              if (onOpenLogoutModal) onOpenLogoutModal();
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+          >
+            <LogOut size={14} />
+            <span>Đăng xuất</span>
+          </button>
         </div>
       </aside>
     </>
@@ -121,4 +149,3 @@ export const Sidebar = ({ isOpen, onClose }) => {
 };
 
 export default Sidebar;
-
