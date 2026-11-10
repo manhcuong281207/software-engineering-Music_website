@@ -10,12 +10,18 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  AlertCircle,
+  Layers,
 } from "lucide-react";
 import { getUsersApi } from "../api/users";
 import { getArtistsApi } from "../api/artists";
-import { getPendingSongsApi, getPendingAlbumsApi } from "../api/catalog";
+import {
+  getPendingSongsApi,
+  getPendingAlbumsApi,
+  getPublicSongsApi,
+} from "../api/catalog";
 import { Button } from "../components/ui/Button";
-import { formatNumber } from "../utils/formatters";
+import { formatNumber, formatDate } from "../utils/formatters";
 import { useAuthStore } from "../store/useAuthStore";
 
 export const DashboardPage = () => {
@@ -23,74 +29,111 @@ export const DashboardPage = () => {
   const admin = useAuthStore((state) => state.admin);
 
   // 1. Fetch Users Count
-  const { data: usersRes, isLoading: isLoadingUsers } = useQuery({
+  const {
+    data: usersRes,
+    isLoading: isLoadingUsers,
+    isError: isErrorUsers,
+  } = useQuery({
     queryKey: ["adminUsersCount"],
     queryFn: () => getUsersApi({ page: 0, size: 1 }),
   });
 
   // 2. Fetch Artists Count
-  const { data: artistsRes, isLoading: isLoadingArtists } = useQuery({
+  const {
+    data: artistsRes,
+    isLoading: isLoadingArtists,
+    isError: isErrorArtists,
+  } = useQuery({
     queryKey: ["adminArtistsCount"],
     queryFn: () => getArtistsApi({ page: 0, size: 1 }),
   });
 
-  // 3. Fetch Pending Songs Count
-  const { data: pendingSongsRes, isLoading: isLoadingSongs } = useQuery({
+  // 3. Fetch Total Songs Count (Catalog)
+  const {
+    data: publicSongsRes,
+    isLoading: isLoadingTotalSongs,
+    isError: isErrorTotalSongs,
+  } = useQuery({
+    queryKey: ["adminTotalSongsCount"],
+    queryFn: () => getPublicSongsApi({ page: 0, size: 1 }),
+  });
+
+  // 4. Fetch Pending Songs (Count + Recent List)
+  const {
+    data: pendingSongsRes,
+    isLoading: isLoadingPendingSongs,
+    isError: isErrorPendingSongs,
+  } = useQuery({
     queryKey: ["adminPendingSongsCount"],
     queryFn: () => getPendingSongsApi({ page: 0, size: 5 }),
   });
 
-  // 4. Fetch Pending Albums Count
-  const { data: pendingAlbumsRes, isLoading: isLoadingAlbums } = useQuery({
+  // 5. Fetch Pending Albums (Count + Recent List)
+  const {
+    data: pendingAlbumsRes,
+    isLoading: isLoadingPendingAlbums,
+    isError: isErrorPendingAlbums,
+  } = useQuery({
     queryKey: ["adminPendingAlbumsCount"],
     queryFn: () => getPendingAlbumsApi({ page: 0, size: 5 }),
   });
 
-  const totalUsers = usersRes?.data?.totalElements ?? 0;
-  const totalArtists = artistsRes?.data?.totalElements ?? 0;
+  const totalUsers = usersRes?.data?.totalElements;
+  const totalArtists = artistsRes?.data?.totalElements;
+  const totalSongs = publicSongsRes?.data?.totalElements;
   const pendingSongsCount = pendingSongsRes?.data?.totalElements ?? 0;
   const pendingAlbumsCount = pendingAlbumsRes?.data?.totalElements ?? 0;
+  const totalPendingContent = pendingSongsCount + pendingAlbumsCount;
 
+  // 4 thẻ chỉ số thống kê chuẩn theo yêu cầu AD01
   const STAT_CARDS = [
     {
       title: "Tổng người dùng",
       value: totalUsers,
+      subText: "Tài khoản người nghe",
       icon: Users,
       color: "text-blue-400",
       bgColor: "bg-blue-500/10",
       borderColor: "border-blue-500/20",
       path: "/users",
       isLoading: isLoadingUsers,
+      isError: isErrorUsers,
     },
     {
       title: "Tổng nghệ sĩ",
       value: totalArtists,
+      subText: "Đối tác sáng tạo âm nhạc",
       icon: Mic2,
       color: "text-emerald-400",
       bgColor: "bg-emerald-500/10",
       borderColor: "border-emerald-500/20",
       path: "/artists",
       isLoading: isLoadingArtists,
+      isError: isErrorArtists,
     },
     {
-      title: "Bài hát chờ duyệt",
-      value: pendingSongsCount,
+      title: "Tổng bài hát phát hành",
+      value: totalSongs,
+      subText: "Tác phẩm trong kho nhạc",
       icon: Music,
+      color: "text-indigo-400",
+      bgColor: "bg-indigo-500/10",
+      borderColor: "border-indigo-500/20",
+      path: "/moderation/songs",
+      isLoading: isLoadingTotalSongs,
+      isError: isErrorTotalSongs,
+    },
+    {
+      title: "Nội dung chờ duyệt",
+      value: totalPendingContent,
+      subText: `${pendingSongsCount} bài hát • ${pendingAlbumsCount} album`,
+      icon: Layers,
       color: "text-[#fa2d48]",
       bgColor: "bg-[#fa2d48]/10",
       borderColor: "border-[#fa2d48]/20",
       path: "/moderation/songs",
-      isLoading: isLoadingSongs,
-    },
-    {
-      title: "Album chờ duyệt",
-      value: pendingAlbumsCount,
-      icon: Disc3,
-      color: "text-amber-400",
-      bgColor: "bg-amber-500/10",
-      borderColor: "border-amber-500/20",
-      path: "/moderation/albums",
-      isLoading: isLoadingAlbums,
+      isLoading: isLoadingPendingSongs || isLoadingPendingAlbums,
+      isError: isErrorPendingSongs && isErrorPendingAlbums,
     },
   ];
 
@@ -108,7 +151,7 @@ export const DashboardPage = () => {
             </h1>
             <p className="text-sm text-neutral-400 mt-1 max-w-xl leading-relaxed">
               Chào mừng bạn đến với trung tâm giám sát và điều hành nền tảng MC Music.
-              Theo dõi người dùng, quản lý đối tác nghệ sĩ và kiểm duyệt nội dung phát hành.
+              Theo dõi người dùng, quản lý đối tác nghệ sĩ và kiểm duyệt nội dung phát hành theo dữ liệu thực tế.
             </p>
           </div>
 
@@ -119,7 +162,7 @@ export const DashboardPage = () => {
               onClick={() => navigate("/moderation/songs")}
               className="gap-2 shadow-[0_4px_16px_rgba(250,45,72,0.35)]"
             >
-              <Clock size={16} /> Duyệt bài hát ({pendingSongsCount})
+              <Clock size={16} /> Duyệt nội dung ({totalPendingContent})
             </Button>
             <Button
               variant="secondary"
@@ -132,7 +175,7 @@ export const DashboardPage = () => {
         </div>
       </div>
 
-      {/* ── 2. STATS GRID ── */}
+      {/* ── 2. 4 THẺ CHỈ SỐ THỐNG KÊ CHUẨN ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {STAT_CARDS.map((stat, idx) => {
           const Icon = stat.icon;
@@ -140,32 +183,47 @@ export const DashboardPage = () => {
             <div
               key={idx}
               onClick={() => navigate(stat.path)}
-              className="group p-5 sm:p-6 rounded-2xl bg-[#181818] border border-neutral-800/80 hover:border-neutral-700 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl"
+              className="group p-5 sm:p-6 rounded-2xl bg-[#181818] border border-neutral-800/80 hover:border-neutral-700 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={`w-12 h-12 rounded-xl ${stat.bgColor} ${stat.color} border ${stat.borderColor} flex items-center justify-center`}
-                >
-                  <Icon size={24} />
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div
+                    className={`w-12 h-12 rounded-xl ${stat.bgColor} ${stat.color} border ${stat.borderColor} flex items-center justify-center`}
+                  >
+                    <Icon size={24} />
+                  </div>
+                  <span className="text-xs text-neutral-500 group-hover:text-white transition-colors flex items-center gap-1">
+                    Chi tiết <ArrowRight size={13} />
+                  </span>
                 </div>
-                <span className="text-xs text-neutral-500 group-hover:text-white transition-colors flex items-center gap-1">
-                  Xem <ArrowRight size={13} />
-                </span>
+
+                <div className="text-2xl sm:text-3xl font-black text-white">
+                  {stat.isLoading ? (
+                    <span className="inline-block w-20 h-8 bg-neutral-800 animate-pulse rounded-lg" />
+                  ) : stat.isError ? (
+                    <span className="text-sm font-semibold text-rose-400 flex items-center gap-1.5 py-1">
+                      <AlertCircle size={15} /> Không thể tải
+                    </span>
+                  ) : (
+                    formatNumber(stat.value ?? 0)
+                  )}
+                </div>
+                <div className="text-xs font-semibold text-neutral-300 mt-1">
+                  {stat.title}
+                </div>
               </div>
-              <div className="text-2xl sm:text-3xl font-black text-white">
-                {stat.isLoading ? "..." : formatNumber(stat.value)}
-              </div>
-              <div className="text-xs font-semibold text-neutral-400 mt-1">
-                {stat.title}
+
+              <div className="text-[11px] text-neutral-500 mt-3 pt-3 border-t border-neutral-800/60">
+                {stat.subText}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* ── 3. PENDING SUMMARY SECTION ── */}
+      {/* ── 3. DANH SÁCH NỘI DUNG MỚI GỬI DUYỆT GẦN ĐÂY ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pending Songs */}
+        {/* Bài hát chờ duyệt */}
         <div className="p-6 rounded-2xl bg-[#181818] border border-neutral-800/80">
           <div className="flex items-center justify-between pb-4 border-b border-neutral-800/80 mb-4">
             <div className="flex items-center gap-2">
@@ -180,32 +238,42 @@ export const DashboardPage = () => {
               onClick={() => navigate("/moderation/songs")}
               className="text-xs"
             >
-              Xem tất cả <ArrowRight size={13} />
+              Xem tất cả ({pendingSongsCount}) <ArrowRight size={13} />
             </Button>
           </div>
 
-          {isLoadingSongs ? (
-            <div className="space-y-3 py-4 text-center text-xs text-neutral-500">
-              Đang tải danh sách chờ duyệt...
+          {isLoadingPendingSongs ? (
+            <div className="space-y-3 py-6 text-center text-xs text-neutral-500 animate-pulse">
+              Đang tải danh sách bài hát chờ duyệt...
+            </div>
+          ) : isErrorPendingSongs ? (
+            <div className="py-6 text-center text-xs text-rose-400 flex flex-col items-center gap-2">
+              <AlertCircle size={20} />
+              <span>Không thể kết nối đến máy chủ kiểm duyệt bài hát</span>
             </div>
           ) : pendingSongsRes?.data?.content?.length > 0 ? (
             <div className="divide-y divide-neutral-800/60">
               {pendingSongsRes.data.content.slice(0, 4).map((song) => (
                 <div
                   key={song.id}
-                  className="py-3 flex items-center justify-between gap-3"
+                  className="py-3 flex items-center justify-between gap-3 hover:bg-neutral-800/20 px-2 rounded-lg transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">
                       {song.title}
                     </p>
                     <p className="text-xs text-neutral-400 truncate">
-                      {song.ownerName || "Chưa có nghệ danh"}
+                      {song.ownerName || "Chưa có nghệ danh"} • {formatDate(song.createdAt)}
                     </p>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
-                    Chờ duyệt
-                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate("/moderation/songs")}
+                    className="text-xs shrink-0"
+                  >
+                    Kiểm duyệt
+                  </Button>
                 </div>
               ))}
             </div>
@@ -217,7 +285,7 @@ export const DashboardPage = () => {
           )}
         </div>
 
-        {/* Pending Albums */}
+        {/* Album chờ duyệt */}
         <div className="p-6 rounded-2xl bg-[#181818] border border-neutral-800/80">
           <div className="flex items-center justify-between pb-4 border-b border-neutral-800/80 mb-4">
             <div className="flex items-center gap-2">
@@ -232,32 +300,42 @@ export const DashboardPage = () => {
               onClick={() => navigate("/moderation/albums")}
               className="text-xs"
             >
-              Xem tất cả <ArrowRight size={13} />
+              Xem tất cả ({pendingAlbumsCount}) <ArrowRight size={13} />
             </Button>
           </div>
 
-          {isLoadingAlbums ? (
-            <div className="space-y-3 py-4 text-center text-xs text-neutral-500">
-              Đang tải danh sách album...
+          {isLoadingPendingAlbums ? (
+            <div className="space-y-3 py-6 text-center text-xs text-neutral-500 animate-pulse">
+              Đang tải danh sách album chờ duyệt...
+            </div>
+          ) : isErrorPendingAlbums ? (
+            <div className="py-6 text-center text-xs text-rose-400 flex flex-col items-center gap-2">
+              <AlertCircle size={20} />
+              <span>Không thể kết nối đến máy chủ kiểm duyệt album</span>
             </div>
           ) : pendingAlbumsRes?.data?.content?.length > 0 ? (
             <div className="divide-y divide-neutral-800/60">
               {pendingAlbumsRes.data.content.slice(0, 4).map((album) => (
                 <div
                   key={album.id}
-                  className="py-3 flex items-center justify-between gap-3"
+                  className="py-3 flex items-center justify-between gap-3 hover:bg-neutral-800/20 px-2 rounded-lg transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">
                       {album.title}
                     </p>
                     <p className="text-xs text-neutral-400 truncate">
-                      {album.ownerName || "Nghệ sĩ"} • {album.albumType || "ALBUM"}
+                      {album.ownerName || "Nghệ sĩ"} • {album.albumType || "ALBUM"} • {formatDate(album.createdAt)}
                     </p>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
-                    Chờ duyệt
-                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate("/moderation/albums")}
+                    className="text-xs shrink-0"
+                  >
+                    Kiểm duyệt
+                  </Button>
                 </div>
               ))}
             </div>

@@ -1,7 +1,18 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Lock, Unlock, Search } from "lucide-react";
-import { getUsersApi, toggleUserStatusApi } from "../api/users";
+import {
+  Users,
+  Lock,
+  Unlock,
+  Search,
+  Eye,
+  ShieldCheck,
+  Calendar,
+  Mail,
+  Fingerprint,
+  AlertCircle,
+} from "lucide-react";
+import { getUsersApi, toggleUserStatusApi, getUserDetailApi } from "../api/users";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { Pagination } from "../components/ui/Pagination";
 import { SkeletonRow } from "../components/ui/Skeleton";
@@ -9,31 +20,40 @@ import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { formatDate } from "../utils/formatters";
 import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
+import { useAuthStore } from "../store/useAuthStore";
 
 export const UsersPage = () => {
   const queryClient = useQueryClient();
+  const currentAdmin = useAuthStore((state) => state.admin);
+
   const [page, setPage] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
+  // Modal Chi tiết tài khoản
+  const [detailUser, setDetailUser] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
   // 1. Fetch Users List
-  const { data: usersRes, isLoading } = useQuery({
+  const { data: usersRes, isLoading, isError } = useQuery({
     queryKey: ["adminUsers", page],
     queryFn: () => getUsersApi({ page, size: 10, sort: "createdAt,desc" }),
   });
 
   const usersList = usersRes?.data?.content || [];
   const totalPages = usersRes?.data?.totalPages || 0;
+  const totalElements = usersRes?.data?.totalElements || 0;
 
-  // Filter by local search keyword
+  // Lọc cục bộ theo từ khóa
   const filteredUsers = usersList.filter(
     (u) =>
       u.fullName?.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchKeyword.toLowerCase())
+      u.email?.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      u.id?.toLowerCase().includes(searchKeyword.toLowerCase())
   );
 
-  // 2. Mutation: Toggle User Status (Lock / Unlock)
+  // 2. Mutation: Khóa / Mở khóa tài khoản
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }) => toggleUserStatusApi(id, isActive),
     onSuccess: (_, variables) => {
@@ -45,6 +65,11 @@ export const UsersPage = () => {
           : "Đã khóa tài khoản người dùng thành công"
       );
       setIsConfirmModalOpen(false);
+
+      // Nếu đang mở modal chi tiết của chính user này thì cập nhật trạng thái hiển thị
+      if (detailUser && detailUser.id === variables.id) {
+        setDetailUser((prev) => ({ ...prev, isActive: variables.isActive }));
+      }
       setSelectedUser(null);
     },
     onError: (err) => {
@@ -54,7 +79,8 @@ export const UsersPage = () => {
     },
   });
 
-  const handleOpenConfirm = (user) => {
+  const handleOpenConfirm = (user, e) => {
+    if (e) e.stopPropagation();
     setSelectedUser(user);
     setIsConfirmModalOpen(true);
   };
@@ -63,6 +89,29 @@ export const UsersPage = () => {
     if (!selectedUser) return;
     const nextStatus = !selectedUser.isActive;
     toggleMutation.mutate({ id: selectedUser.id, isActive: nextStatus });
+  };
+
+  // Mở modal xem thông tin chi tiết
+  const handleOpenDetail = async (user) => {
+    setDetailUser(user);
+    setIsDetailModalOpen(true);
+    try {
+      const res = await getUserDetailApi(user.id);
+      if (res?.data) {
+        setDetailUser(res.data);
+      }
+    } catch {
+      // Giữ dữ liệu hiện tại từ bảng nếu API chi tiết gặp lỗi nhẹ
+    }
+  };
+
+  // Kiểm tra an toàn: Admin có phải đang thao tác trên tài khoản của chính mình không
+  const isSelf = (user) => {
+    if (!user || !currentAdmin) return false;
+    return (
+      (currentAdmin.id && currentAdmin.id === user.id) ||
+      (currentAdmin.email && currentAdmin.email === user.email)
+    );
   };
 
   return (
@@ -74,7 +123,7 @@ export const UsersPage = () => {
             <Users size={26} className="text-[#fa2d48]" /> Quản lý Người dùng
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Danh sách tất cả tài khoản người nghe trong hệ sinh thái MC Music
+            Tổng cộng {totalElements} tài khoản người nghe trong hệ sinh thái MC Music
           </p>
         </div>
 
@@ -88,7 +137,7 @@ export const UsersPage = () => {
             type="text"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
-            placeholder="Tìm theo tên hoặc email..."
+            placeholder="Tìm theo tên, email, ID..."
             className="w-full pl-10 pr-4 py-2 bg-[#181818] border border-neutral-800 rounded-full text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#fa2d48] transition-colors"
           />
         </div>
@@ -112,80 +161,115 @@ export const UsersPage = () => {
                 Array.from({ length: 5 }).map((_, i) => (
                   <SkeletonRow key={i} cols={5} />
                 ))
+              ) : isError ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-xs text-rose-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <AlertCircle size={22} />
+                      <span>Không thể tải danh sách người dùng từ hệ thống</span>
+                    </div>
+                  </td>
+                </tr>
               ) : filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="hover:bg-neutral-800/30 transition-colors"
-                  >
-                    {/* User info */}
-                    <td className="py-3.5 px-6">
-                      <div className="flex items-center gap-3">
-                        {user.avatarUrl ? (
-                          <img
-                            src={user.avatarUrl}
-                            alt={user.fullName}
-                            className="w-9 h-9 rounded-full object-cover border border-neutral-700"
-                          />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-neutral-800 text-neutral-300 font-bold flex items-center justify-center text-xs">
-                            {user.fullName ? user.fullName.charAt(0).toUpperCase() : "U"}
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-bold text-white text-sm">
-                            {user.fullName || "Chưa cập nhật tên"}
-                          </div>
-                          <div className="text-[11px] text-neutral-500 font-mono">
-                            {user.id}
+                filteredUsers.map((user) => {
+                  const selfUser = isSelf(user);
+                  return (
+                    <tr
+                      key={user.id}
+                      onClick={() => handleOpenDetail(user)}
+                      className="hover:bg-neutral-800/30 transition-colors cursor-pointer"
+                    >
+                      {/* User info */}
+                      <td className="py-3.5 px-6">
+                        <div className="flex items-center gap-3">
+                          {user.avatarUrl ? (
+                            <img
+                              src={user.avatarUrl}
+                              alt={user.fullName}
+                              className="w-9 h-9 rounded-full object-cover border border-neutral-700 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-neutral-800 text-neutral-300 font-bold flex items-center justify-center text-xs shrink-0">
+                              {user.fullName ? user.fullName.charAt(0).toUpperCase() : "U"}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-bold text-white text-sm truncate flex items-center gap-1.5">
+                              {user.fullName || "Chưa cập nhật tên"}
+                              {selfUser && (
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
+                                  Bạn
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-neutral-500 font-mono truncate">
+                              {user.id}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Email */}
-                    <td className="py-3.5 px-6 text-neutral-300">
-                      {user.email}
-                    </td>
+                      {/* Email */}
+                      <td className="py-3.5 px-6 text-neutral-300">
+                        {user.email}
+                      </td>
 
-                    {/* Status */}
-                    <td className="py-3.5 px-6">
-                      <StatusBadge isActive={user.isActive ?? true} />
-                    </td>
+                      {/* Status */}
+                      <td className="py-3.5 px-6">
+                        <StatusBadge isActive={user.isActive ?? true} />
+                      </td>
 
-                    {/* Created Date */}
-                    <td className="py-3.5 px-6 text-neutral-400">
-                      {formatDate(user.createdAt)}
-                    </td>
+                      {/* Created Date */}
+                      <td className="py-3.5 px-6 text-neutral-400">
+                        {formatDate(user.createdAt)}
+                      </td>
 
-                    {/* Actions */}
-                    <td className="py-3.5 px-6 text-right">
-                      <Button
-                        variant={user.isActive ? "danger" : "secondary"}
-                        size="sm"
-                        onClick={() => handleOpenConfirm(user)}
-                        className="ml-auto text-xs"
-                      >
-                        {user.isActive ? (
-                          <>
-                            <Lock size={13} /> Khóa tài khoản
-                          </>
-                        ) : (
-                          <>
-                            <Unlock size={13} /> Mở khóa
-                          </>
-                        )}
-                      </Button>
-                    </td>
-                  </tr>
-                ))
+                      {/* Actions */}
+                      <td className="py-3.5 px-6 text-right">
+                        <div
+                          className="flex items-center justify-end gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenDetail(user)}
+                            className="text-xs text-neutral-400 hover:text-white"
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={14} /> Chi tiết
+                          </Button>
+
+                          <Button
+                            variant={user.isActive ? "danger" : "secondary"}
+                            size="sm"
+                            onClick={(e) => handleOpenConfirm(user, e)}
+                            disabled={selfUser}
+                            className="text-xs"
+                            title={selfUser ? "Không thể khóa tài khoản của chính mình" : undefined}
+                          >
+                            {user.isActive ? (
+                              <>
+                                <Lock size={13} /> Khóa
+                              </>
+                            ) : (
+                              <>
+                                <Unlock size={13} /> Mở khóa
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td
                     colSpan={5}
                     className="py-12 text-center text-xs text-neutral-500"
                   >
-                    Không tìm thấy người dùng nào phù hợp
+                    Không tìm thấy người dùng nào phù hợp với từ khóa
                   </td>
                 </tr>
               )}
@@ -203,7 +287,116 @@ export const UsersPage = () => {
         </div>
       </div>
 
-      {/* ── CONFIRM MODAL ── */}
+      {/* ── MODAL 1: XEM CHI TIẾT TÀI KHOẢN (USER PROFILE MODAL) ── */}
+      <Modal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        title="Thông tin chi tiết Người dùng"
+      >
+        {detailUser && (
+          <div className="space-y-6">
+            {/* Header info */}
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-neutral-900/80 border border-neutral-800">
+              {detailUser.avatarUrl ? (
+                <img
+                  src={detailUser.avatarUrl}
+                  alt={detailUser.fullName}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-[#fa2d48]/40"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-neutral-800 text-white text-xl font-bold flex items-center justify-center border-2 border-neutral-700">
+                  {detailUser.fullName ? detailUser.fullName.charAt(0).toUpperCase() : "U"}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-white truncate">
+                    {detailUser.fullName || "Chưa cập nhật tên"}
+                  </h3>
+                  {isSelf(detailUser) && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
+                      Tài khoản của bạn
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-neutral-400 truncate flex items-center gap-1.5 mt-0.5">
+                  <Mail size={13} className="text-neutral-500" /> {detailUser.email}
+                </p>
+                <div className="mt-2">
+                  <StatusBadge isActive={detailUser.isActive ?? true} />
+                </div>
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
+                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
+                  <Fingerprint size={14} className="text-[#fa2d48]" /> ID Người dùng
+                </span>
+                <span className="text-white font-mono text-[11px] break-all select-all">
+                  {detailUser.id}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
+                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
+                  <ShieldCheck size={14} className="text-blue-400" /> Vai trò hệ thống
+                </span>
+                <span className="text-white font-semibold">
+                  Tài khoản Người nghe (User)
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80 sm:col-span-2">
+                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
+                  <Calendar size={14} className="text-emerald-400" /> Thời gian đăng ký tài khoản
+                </span>
+                <span className="text-white font-semibold">
+                  {formatDate(detailUser.createdAt)}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-neutral-800">
+              <div>
+                {!isSelf(detailUser) && (
+                  <Button
+                    variant={detailUser.isActive ? "danger" : "secondary"}
+                    size="sm"
+                    onClick={() => {
+                      setIsDetailModalOpen(false);
+                      handleOpenConfirm(detailUser);
+                    }}
+                    className="text-xs"
+                  >
+                    {detailUser.isActive ? (
+                      <>
+                        <Lock size={13} /> Khóa tài khoản này
+                      </>
+                    ) : (
+                      <>
+                        <Unlock size={13} /> Mở khóa tài khoản
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsDetailModalOpen(false)}
+              >
+                Đóng
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── MODAL 2: XÁC NHẬN KHÓA / MỞ KHÓA ── */}
       <Modal
         isOpen={isConfirmModalOpen}
         onClose={() => setIsConfirmModalOpen(false)}
