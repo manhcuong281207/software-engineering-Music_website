@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "../store/useAuthStore";
+import { showErrorToast } from "../utils/toastUtils";
 
 // Base URL: qua Vite proxy ("/api" -> "http://localhost:8686/api") hoặc biến môi trường
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -66,11 +67,16 @@ api.interceptors.response.use(
 
       // --- Xử lý 403 Forbidden: Không đủ quyền quản trị ---
       if (status === 403) {
-        console.warn("[Admin API] 403 Forbidden: Tài khoản không có quyền thực hiện hành động này.");
+        const forbiddenMsg =
+          error.response?.data?.message ||
+          "Tài khoản của bạn không có quyền thực hiện thao tác này.";
+        console.warn("[Admin API] 403 Forbidden:", forbiddenMsg);
+        showErrorToast(forbiddenMsg);
+
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("mc-admin-forbidden", {
-              detail: { message: error.response?.data?.message || "Bạn không có quyền thực hiện chức năng này." },
+              detail: { message: forbiddenMsg },
             })
           );
         }
@@ -89,6 +95,7 @@ api.interceptors.response.use(
         // Không có refresh token -> đăng xuất người dùng
         if (!refreshToken) {
           logout();
+          showErrorToast("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.");
           return Promise.reject(error);
         }
 
@@ -123,11 +130,12 @@ api.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
             return api(originalRequest);
           } else {
-            throw new Error("Không nhận được token mới từ server");
+            throw new Error("Không nhận được token mới từ máy chủ");
           }
         } catch (refreshErr) {
           processQueue(refreshErr, null);
           logout();
+          showErrorToast("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.");
           return Promise.reject(refreshErr);
         } finally {
           isRefreshing = false;
@@ -140,4 +148,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

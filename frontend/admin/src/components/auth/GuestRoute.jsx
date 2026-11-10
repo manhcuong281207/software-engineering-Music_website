@@ -3,9 +3,10 @@ import { Navigate, Outlet } from "react-router";
 import { useAuthStore } from "../../store/useAuthStore";
 
 export const GuestRoute = () => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { isAuthenticated, accessToken, hasValidAdminRole } = useAuthStore();
 
-  if (isAuthenticated) {
+  // Nếu đã đăng nhập với quyền Admin hợp lệ -> Chuyển thẳng về Dashboard
+  if (isAuthenticated && accessToken && hasValidAdminRole()) {
     return <Navigate to="/" replace />;
   }
 
@@ -13,4 +14,3 @@ export const GuestRoute = () => {
 };
 
 export default GuestRoute;
-
