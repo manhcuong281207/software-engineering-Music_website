@@ -345,6 +345,27 @@ public class SongService {
     }
 
     @Transactional(readOnly = true)
+    public SongResponse getSongById(UUID songId) {
+        Song song = songRepository.findById(songId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bài hát không tồn tại với id: " + songId));
+        return modelMapper.map(song, SongResponse.class);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SongResponse> getSongsByAlbum(UUID albumId) {
+        return songRepository.findByAlbumIdAndIsDeletedFalse(albumId).stream()
+                .map(song -> modelMapper.map(song, SongResponse.class))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public com.example.catalogservice.model.dto.response.LyricsResponse getLyricsBySongId(UUID songId) {
+        return lyricsRepository.findBySongId(songId)
+                .map(l -> modelMapper.map(l, com.example.catalogservice.model.dto.response.LyricsResponse.class))
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
     public List<SongResponse> getPublicSongs() {
         return songRepository.findByStatusAndIsDeletedFalse("APPROVED").stream()
                 .map(song -> modelMapper.map(song, SongResponse.class))

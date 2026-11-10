@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route } from "react-router";
+import { Routes, Route, Navigate } from "react-router";
 
 import { AdminLayout } from "../layouts/AdminLayout";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -27,6 +27,7 @@ export const AppRoutes = () => {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/artists" element={<ArtistsPage />} />
+          <Route path="/moderation" element={<Navigate to="/moderation/songs" replace />} />
           <Route path="/moderation/songs" element={<SongModerationPage />} />
           <Route path="/moderation/albums" element={<AlbumModerationPage />} />
         </Route>

@@ -35,3 +35,26 @@ export const formatDuration = (seconds) => {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 };
 
+/**
+ * Định dạng khoảng thời gian tương đối (VD: 5 phút trước, 2 giờ trước)
+ */
+export const formatRelativeTime = (dateString) => {
+  if (!dateString) return "";
+  try {
+    const d = new Date(dateString);
+    const now = new Date();
+    const diffSec = Math.floor((now - d) / 1000);
+    if (diffSec < 60) return "Vừa xong";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} phút trước`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} giờ trước`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 30) return `${diffDay} ngày trước`;
+    const diffMonth = Math.floor(diffDay / 30);
+    return `${diffMonth} tháng trước`;
+  } catch {
+    return "";
+  }
+};
+

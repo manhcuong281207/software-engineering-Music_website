@@ -55,6 +55,46 @@ export const updateAlbumStatusApi = async (albumId, status, reason = "") => {
 };
 
 /**
+ * Lấy chi tiết bài hát cho Admin (kể cả PENDING, REJECTED, TAKEDOWN)
+ * @param {string} songId - UUID của bài hát
+ * @returns {Promise<Object>}
+ */
+export const getAdminSongDetailApi = async (songId) => {
+  const response = await api.get(`/catalog/admin/songs/${songId}`);
+  return response.data;
+};
+
+/**
+ * Lấy lời bài hát cho Admin
+ * @param {string} songId - UUID của bài hát
+ * @returns {Promise<Object>}
+ */
+export const getAdminSongLyricsApi = async (songId) => {
+  const response = await api.get(`/catalog/admin/songs/${songId}/lyrics`);
+  return response.data;
+};
+
+/**
+ * Lấy chi tiết Album cho Admin (kể cả PENDING)
+ * @param {string} albumId - UUID của album
+ * @returns {Promise<Object>}
+ */
+export const getAdminAlbumDetailApi = async (albumId) => {
+  const response = await api.get(`/catalog/admin/albums/${albumId}`);
+  return response.data;
+};
+
+/**
+ * Lấy danh sách bài hát trong Album cho Admin (kể cả bài hát/album PENDING)
+ * @param {string} albumId - UUID của album
+ * @returns {Promise<Object>}
+ */
+export const getAdminAlbumSongsApi = async (albumId) => {
+  const response = await api.get(`/catalog/admin/albums/${albumId}/songs`);
+  return response.data;
+};
+
+/**
  * Lấy danh sách thể loại nhạc công khai
  * @returns {Promise<Object>}
  */

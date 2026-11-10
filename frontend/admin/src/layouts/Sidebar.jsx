@@ -1,5 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -12,6 +13,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
+import { getPendingSongsApi, getPendingAlbumsApi } from "../api/catalog";
 
 const NAV_ITEMS = [
   {
@@ -44,6 +46,20 @@ const NAV_ITEMS = [
 
 export const Sidebar = ({ isOpen, onClose, onOpenLogoutModal }) => {
   const { admin } = useAuthStore();
+
+  // Badge counts for moderation
+  const { data: songsRes } = useQuery({
+    queryKey: ["adminPendingSongsCount"],
+    queryFn: () => getPendingSongsApi({ page: 0, size: 1 }),
+  });
+
+  const { data: albumsRes } = useQuery({
+    queryKey: ["adminPendingAlbumsCount"],
+    queryFn: () => getPendingAlbumsApi({ page: 0, size: 1 }),
+  });
+
+  const pendingSongs = songsRes?.data?.totalElements ?? 0;
+  const pendingAlbums = albumsRes?.data?.totalElements ?? 0;
 
   return (
     <>
@@ -93,6 +109,10 @@ export const Sidebar = ({ isOpen, onClose, onOpenLogoutModal }) => {
 
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
+            let badge = null;
+            if (item.to === "/moderation/songs" && pendingSongs > 0) badge = pendingSongs;
+            if (item.to === "/moderation/albums" && pendingAlbums > 0) badge = pendingAlbums;
+
             return (
               <NavLink
                 key={item.to}
@@ -108,7 +128,12 @@ export const Sidebar = ({ isOpen, onClose, onOpenLogoutModal }) => {
                 }
               >
                 <Icon size={18} />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {badge > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    {badge}
+                  </span>
+                )}
               </NavLink>
             );
           })}
