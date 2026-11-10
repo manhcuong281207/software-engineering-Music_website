@@ -63,3 +63,15 @@ export const getPublicGenresApi = async () => {
   return response.data;
 };
 
+/**
+ * Lấy danh sách bài hát công khai (dùng để lấy tổng số bài hát phát hành cho Dashboard)
+ * @param {Object} params - { page, size, keyword, genreId, sort }
+ * @returns {Promise<Object>}
+ */
+export const getPublicSongsApi = async ({ page = 0, size = 10, keyword = "", sort = "createdAt,desc" } = {}) => {
+  const response = await api.get("/catalog/public/songs", {
+    params: { page, size, keyword, sort },
+  });
+  return response.data;
+};
+
