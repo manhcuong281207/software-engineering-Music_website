@@ -1,21 +1,37 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Disc3, Check, X, Layers } from "lucide-react";
+import {
+  Disc3,
+  Check,
+  X,
+  Layers,
+  Eye,
+  AlertTriangle,
+  Calendar,
+} from "lucide-react";
 import { getPendingAlbumsApi, updateAlbumStatusApi } from "../api/catalog";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { Pagination } from "../components/ui/Pagination";
 import { SkeletonRow } from "../components/ui/Skeleton";
 import { Button } from "../components/ui/Button";
-import { Modal } from "../components/ui/Modal";
+import { ModerationTabs } from "../components/moderation/ModerationTabs";
+import { AlbumDetailModal } from "../components/moderation/AlbumDetailModal";
+import { ModerationConfirmModal } from "../components/moderation/ModerationConfirmModal";
+import { formatDate, formatRelativeTime } from "../utils/formatters";
 import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
 
 export const AlbumModerationPage = () => {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
+
+  // Detail Modal state
+  const [detailAlbum, setDetailAlbum] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Action / Confirm Modal state
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [actionType, setActionType] = useState(null); // 'APPROVED' | 'REJECTED' | 'TAKEDOWN'
-  const [reason, setReason] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   // 1. Fetch Pending Albums
   const { data: albumsRes, isLoading } = useQuery({
@@ -25,23 +41,32 @@ export const AlbumModerationPage = () => {
 
   const pendingAlbums = albumsRes?.data?.content || [];
   const totalPages = albumsRes?.data?.totalPages || 0;
+  const totalElements = albumsRes?.data?.totalElements || 0;
 
   // 2. Mutation: Update Album Status
   const updateStatusMutation = useMutation({
     mutationFn: ({ albumId, status, reason }) =>
       updateAlbumStatusApi(albumId, status, reason),
     onSuccess: (_, variables) => {
+      // Invalidate and refresh all related queries
       queryClient.invalidateQueries({ queryKey: ["adminPendingAlbums"] });
       queryClient.invalidateQueries({ queryKey: ["adminPendingAlbumsCount"] });
+      queryClient.invalidateQueries({ queryKey: ["adminPendingSongs"] });
+      queryClient.invalidateQueries({ queryKey: ["adminPendingSongsCount"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTotalSongsCount"] });
+
       const statusMap = {
         APPROVED: "Đã duyệt và công khai album thành công!",
         REJECTED: "Đã từ chối album thành công!",
-        TAKEDOWN: "Đã gỡ bỏ album vi phạm!",
+        TAKEDOWN: "Đã gỡ bỏ album vi phạm thành công!",
       };
       showSuccessToast(statusMap[variables.status] || "Thao tác thành công");
-      setIsModalOpen(false);
+
+      // Close modals and reset state
+      setIsConfirmOpen(false);
+      setIsDetailOpen(false);
       setSelectedAlbum(null);
-      setReason("");
+      setDetailAlbum(null);
     },
     onError: (err) => {
       showErrorToast(
@@ -50,88 +75,104 @@ export const AlbumModerationPage = () => {
     },
   });
 
-  const handleOpenActionModal = (album, type) => {
+  // Open confirmation dialog
+  const handleOpenConfirm = (album, type) => {
     setSelectedAlbum(album);
     setActionType(type);
-    setReason("");
-    if (type === "APPROVED") {
-      updateStatusMutation.mutate({
-        albumId: album.id,
-        status: "APPROVED",
-        reason: "",
-      });
-    } else {
-      setIsModalOpen(true);
-    }
+    setIsConfirmOpen(true);
   };
 
-  const handleConfirmAction = () => {
-    if (!selectedAlbum || !actionType) return;
+  // Perform confirmed action
+  const handleConfirmAction = ({ status, reason }) => {
+    if (!selectedAlbum) return;
     updateStatusMutation.mutate({
       albumId: selectedAlbum.id,
-      status: actionType,
+      status,
       reason,
     });
   };
 
+  // Open detail modal
+  const handleOpenDetail = (album) => {
+    setDetailAlbum(album);
+    setIsDetailOpen(true);
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* ── HEADER & TABS ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-white flex items-center gap-2.5">
             <Disc3 size={26} className="text-[#fa2d48]" /> Kiểm duyệt Album
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Danh sách Album / EP do các nghệ sĩ đăng tải đang chờ phê duyệt
+            Xem xét, kiểm tra tracklist và phê duyệt hoặc gỡ bỏ các Album/EP do nghệ sĩ đăng tải
           </p>
         </div>
+
+        {/* Tab switcher: Songs vs Albums */}
+        <ModerationTabs activeTab="albums" />
       </div>
 
       {/* ── TABLE CARD ── */}
       <div className="bg-[#181818] border border-neutral-800/80 rounded-2xl overflow-hidden shadow-xl">
+        {/* Table summary bar */}
+        <div className="p-4 px-6 border-b border-neutral-800/80 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 text-neutral-300 font-semibold">
+            <span>Danh sách Album / EP chờ kiểm duyệt</span>
+            <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 font-mono text-[11px]">
+              {totalElements} album
+            </span>
+          </div>
+          <span className="text-neutral-500 text-[11px]">
+            Nhấn vào biểu tượng con mắt để xem tracklist và nghe thử từng bài trong album
+          </span>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-neutral-800/80 bg-neutral-900/60 text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
                 <th className="py-4 px-6">Album</th>
-                <th className="py-4 px-6">Nghệ sĩ</th>
+                <th className="py-4 px-6">Nghệ sĩ đăng tải</th>
                 <th className="py-4 px-6">Phân loại</th>
-                <th className="py-4 px-6">Số bài</th>
+                <th className="py-4 px-6">Số bài hát</th>
+                <th className="py-4 px-6">Thời gian gửi duyệt</th>
                 <th className="py-4 px-6">Trạng thái</th>
-                <th className="py-4 px-6 text-right">Phê duyệt</th>
+                <th className="py-4 px-6 text-right">Thao tác duyệt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800/60 text-xs">
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <SkeletonRow key={i} cols={6} />
+                  <SkeletonRow key={i} cols={7} />
                 ))
               ) : pendingAlbums.length > 0 ? (
                 pendingAlbums.map((album) => (
                   <tr
                     key={album.id}
-                    className="hover:bg-neutral-800/30 transition-colors"
+                    className="hover:bg-neutral-800/30 transition-colors group"
                   >
-                    {/* Album cover + Title */}
+                    {/* Album cover + Title + ID */}
                     <td className="py-3.5 px-6">
                       <div className="flex items-center gap-3">
                         {album.coverImage ? (
                           <img
                             src={album.coverImage}
                             alt={album.title}
-                            className="w-10 h-10 rounded-lg object-cover border border-neutral-700 shadow-sm"
+                            className="w-11 h-11 rounded-xl object-cover border border-neutral-700 shadow-sm shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-neutral-800 text-neutral-400 flex items-center justify-center">
+                          <div className="w-11 h-11 rounded-xl bg-neutral-800 text-neutral-400 flex items-center justify-center shrink-0 border border-neutral-700">
                             <Layers size={20} />
                           </div>
                         )}
-                        <div>
-                          <div className="font-bold text-white text-sm">
+                        <div className="min-w-0">
+                          <div className="font-bold text-white text-sm truncate max-w-[200px]">
                             {album.title}
                           </div>
-                          <div className="text-[11px] text-neutral-500 font-mono">
+                          <div className="text-[11px] text-neutral-500 font-mono truncate max-w-[180px]">
                             {album.id}
                           </div>
                         </div>
@@ -144,15 +185,25 @@ export const AlbumModerationPage = () => {
                     </td>
 
                     {/* Type */}
-                    <td className="py-3.5 px-6 text-neutral-400 font-mono">
-                      <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px]">
+                    <td className="py-3.5 px-6 font-mono">
+                      <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px] font-semibold">
                         {album.albumType || "ALBUM"}
                       </span>
                     </td>
 
                     {/* Total tracks */}
-                    <td className="py-3.5 px-6 text-neutral-400 font-medium">
+                    <td className="py-3.5 px-6 text-neutral-300 font-medium">
                       {album.totalTracks || 0} bài hát
+                    </td>
+
+                    {/* Thời gian gửi duyệt */}
+                    <td className="py-3.5 px-6">
+                      <div className="text-white font-medium">
+                        {formatDate(album.createdAt)}
+                      </div>
+                      <div className="text-[11px] text-neutral-500">
+                        {formatRelativeTime(album.createdAt)}
+                      </div>
                     </td>
 
                     {/* Status */}
@@ -162,28 +213,46 @@ export const AlbumModerationPage = () => {
 
                     {/* Actions */}
                     <td className="py-3.5 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Xem chi tiết */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetail(album)}
+                          className="p-2 rounded-xl bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-all cursor-pointer"
+                          title="Xem chi tiết và tracklist album"
+                        >
+                          <Eye size={15} />
+                        </button>
+
+                        {/* Duyệt (Approve) */}
                         <Button
                           variant="white"
                           size="sm"
-                          onClick={() => handleOpenActionModal(album, "APPROVED")}
-                          className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 shadow-[0_2px_10px_rgba(16,185,129,0.3)] text-xs"
-                          isLoading={
-                            updateStatusMutation.isPending &&
-                            selectedAlbum?.id === album.id &&
-                            actionType === "APPROVED"
-                          }
+                          onClick={() => handleOpenConfirm(album, "APPROVED")}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 shadow-[0_2px_10px_rgba(16,185,129,0.3)] text-xs h-8 px-3"
                         >
                           <Check size={14} /> Duyệt
                         </Button>
+
+                        {/* Từ chối (Reject) */}
                         <Button
                           variant="danger"
                           size="sm"
-                          onClick={() => handleOpenActionModal(album, "REJECTED")}
-                          className="text-xs"
+                          onClick={() => handleOpenConfirm(album, "REJECTED")}
+                          className="text-xs h-8 px-3"
                         >
                           <X size={14} /> Từ chối
                         </Button>
+
+                        {/* Gỡ vi phạm (Takedown) */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenConfirm(album, "TAKEDOWN")}
+                          className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
+                          title="Gỡ bỏ album vi phạm (Takedown)"
+                        >
+                          <AlertTriangle size={15} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -191,10 +260,16 @@ export const AlbumModerationPage = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan={6}
-                    className="py-12 text-center text-xs text-neutral-500"
+                    colSpan={7}
+                    className="py-16 text-center text-xs text-neutral-500 space-y-2"
                   >
-                    Tuyệt vời! Hiện tại không có album nào đang chờ duyệt.
+                    <Disc3 size={32} className="mx-auto text-neutral-600 mb-2 opacity-50" />
+                    <p className="font-semibold text-neutral-400">
+                      Tuyệt vời! Hiện tại không có album nào đang chờ duyệt.
+                    </p>
+                    <p className="text-[11px] text-neutral-600">
+                      Khi nghệ sĩ tạo album hoặc EP mới, nội dung sẽ xuất hiện tại đây để bạn kiểm duyệt.
+                    </p>
                   </td>
                 </tr>
               )}
@@ -203,67 +278,43 @@ export const AlbumModerationPage = () => {
         </div>
 
         {/* Pagination */}
-        <div className="p-4 border-t border-neutral-800/80">
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-        </div>
-      </div>
-
-      {/* ── MODAL LÝ DO TỪ CHỐI ── */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={
-          actionType === "REJECTED" ? "Từ chối duyệt Album" : "Gỡ bỏ Album"
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-neutral-300">
-            Bạn đang từ chối album{" "}
-            <span className="font-bold text-white">{selectedAlbum?.title}</span> của
-            nghệ sĩ{" "}
-            <span className="text-[#fa2d48] font-bold">
-              {selectedAlbum?.ownerName}
-            </span>
-            . Vui lòng nhập lý do để phản hồi lại cho nghệ sĩ.
-          </p>
-
-          <div>
-            <label className="block text-xs font-semibold text-neutral-400 mb-1.5">
-              Lý do từ chối (tùy chọn)
-            </label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="VD: Thông tin tracklist không hợp lệ, hình ảnh cover vi phạm quy chuẩn..."
-              rows={3}
-              className="w-full p-3 bg-[#121212] border border-neutral-800 rounded-xl text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#fa2d48] transition-colors resize-none"
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-neutral-800/80">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
             />
           </div>
+        )}
+      </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsModalOpen(false)}
-              disabled={updateStatusMutation.isPending}
-            >
-              Hủy
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleConfirmAction}
-              isLoading={updateStatusMutation.isPending}
-            >
-              Xác nhận từ chối
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* ── MODAL XEM CHI TIẾT ALBUM & TRACKLIST ── */}
+      <AlbumDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setDetailAlbum(null);
+        }}
+        album={detailAlbum}
+        onApprove={(album) => handleOpenConfirm(album, "APPROVED")}
+        onReject={(album) => handleOpenConfirm(album, "REJECTED")}
+        onTakedown={(album) => handleOpenConfirm(album, "TAKEDOWN")}
+      />
+
+      {/* ── MODAL XÁC NHẬN HÀNH ĐỘNG (DUYỆT / TỪ CHỐI / GỠ VI PHẠM) ── */}
+      <ModerationConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => {
+          setIsConfirmOpen(false);
+          setSelectedAlbum(null);
+        }}
+        onConfirm={handleConfirmAction}
+        item={selectedAlbum}
+        itemType="album"
+        actionType={actionType}
+        isLoading={updateStatusMutation.isPending}
+      />
     </div>
   );
 };

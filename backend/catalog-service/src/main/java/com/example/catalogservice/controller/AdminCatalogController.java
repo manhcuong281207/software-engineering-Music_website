@@ -103,4 +103,28 @@ public class AdminCatalogController {
         albumService.updateAlbumStatus(albumId, status);
         return ResponseEntity.ok(ApiResponse.success(null, "Cập nhật trạng thái album thành công"));
     }
+
+    @GetMapping("/songs/{songId}")
+    public ResponseEntity<ApiResponse<SongResponse>> getSongById(@PathVariable UUID songId) {
+        SongResponse song = songService.getSongById(songId);
+        return ResponseEntity.ok(ApiResponse.success(song, "Lấy thông tin chi tiết bài hát thành công"));
+    }
+
+    @GetMapping("/songs/{songId}/lyrics")
+    public ResponseEntity<ApiResponse<com.example.catalogservice.model.dto.response.LyricsResponse>> getLyricsBySongId(@PathVariable UUID songId) {
+        com.example.catalogservice.model.dto.response.LyricsResponse lyrics = songService.getLyricsBySongId(songId);
+        return ResponseEntity.ok(ApiResponse.success(lyrics, "Lấy lời bài hát thành công"));
+    }
+
+    @GetMapping("/albums/{albumId}")
+    public ResponseEntity<ApiResponse<AlbumResponse>> getAlbumById(@PathVariable UUID albumId) {
+        AlbumResponse album = albumService.getAlbumById(albumId);
+        return ResponseEntity.ok(ApiResponse.success(album, "Lấy thông tin chi tiết album thành công"));
+    }
+
+    @GetMapping("/albums/{albumId}/songs")
+    public ResponseEntity<ApiResponse<List<SongResponse>>> getAlbumSongs(@PathVariable UUID albumId) {
+        List<SongResponse> songs = songService.getSongsByAlbum(albumId);
+        return ResponseEntity.ok(ApiResponse.success(songs, "Lấy danh sách bài hát trong album thành công"));
+    }
 }
