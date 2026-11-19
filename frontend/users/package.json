@@ -12,17 +12,16 @@
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/react-query": "^5.104.2",
+    "@tanstack/react-query": "^5.102.8",
     "axios": "^1.20.0",
-    "lucide-react": "^1.57.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "react-hook-form": "^7.90.0",
+    "lucide-react": "^1.45.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.88.0",
     "react-router": "^7.18.4",
-    "react-router-dom": "^7.18.4",
     "sonner": "^2.0.8",
     "tailwindcss": "^4.3.3",
-    "zod": "^4.6.7",
+    "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

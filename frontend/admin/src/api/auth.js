@@ -1,31 +1,28 @@
 import api from "../lib/axios";
 
 /**
- * Đăng nhập Quản trị viên
+ * Đăng nhập tài khoản Admin
  * @param {Object} credentials - { email, password }
- * @returns {Promise<Object>} Response từ server chứa accessToken, refreshToken và thông tin admin
  */
-export const loginAdminApi = async ({ email, password }) => {
-  const response = await api.post("/admin/auth/login", { email, password });
+export const loginApi = async (credentials) => {
+  const response = await api.post("/admin/auth/login", credentials);
   return response.data;
 };
 
 /**
- * Làm mới Token cho Quản trị viên
+ * Làm mới Access Token bằng Refresh Token
  * @param {string} refreshToken
- * @returns {Promise<Object>}
  */
-export const refreshTokenAdminApi = async (refreshToken) => {
+export const refreshTokenApi = async (refreshToken) => {
   const response = await api.post("/admin/auth/refresh", { refreshToken });
   return response.data;
 };
 
 /**
- * Đăng xuất Quản trị viên
+ * Đăng xuất tài khoản Admin
  * @param {string} refreshToken
- * @returns {Promise<Object>}
  */
-export const logoutAdminApi = async (refreshToken) => {
+export const logoutApi = async (refreshToken) => {
   const response = await api.post("/admin/auth/logout", { refreshToken });
   return response.data;
 };

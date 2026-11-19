@@ -15,7 +15,6 @@ public class AuthResponse {
     private UUID adminId;
     private String email;
     private String fullName;
-    private String role;
     private String accessToken;
     private String refreshToken;
 }

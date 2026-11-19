@@ -1,25 +1,21 @@
 server:
-    port: 8686
-spring:
-    application:
-        name: api-gateway
-
-service:
-    uri:
-        users: http://localhost:8082
-        catalog: http://localhost:8081
-        artists: http://localhost:8083
-        admin: http://localhost:8084
-
----
+    port: ${SERVER_PORT}
+    tomcat:
+        connection-timeout: ${SERVER_TOMCAT_CONNECTION_TIMEOUT}
 spring:
     config:
-        activate:
-            on-profile: docker
-            
+        import: optional:file:.env[.properties]
+    application:
+        name: ${SPRING_APPLICATION_NAME}
+    servlet:
+        multipart:
+            enabled: ${SPRING_SERVLET_MULTIPART_ENABLED}
+            max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE}
+            max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE}
+
 service:
     uri:
-        users: http://users-service:8082
-        catalog: http://catalog-service:8081
-        artists: http://artists-service:8083
-        admin: http://admin-service:8084
+        users: ${SERVICE_URI_USERS}
+        catalog: ${SERVICE_URI_CATALOG}
+        artists: ${SERVICE_URI_ARTISTS}
+        admin: ${SERVICE_URI_ADMIN}

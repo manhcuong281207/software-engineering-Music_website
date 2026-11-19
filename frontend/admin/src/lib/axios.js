@@ -1,19 +1,19 @@
 import axios from "axios";
 import { useAuthStore } from "../store/useAuthStore";
-import { showErrorToast } from "../utils/toastUtils";
 
-// Base URL: qua Vite proxy ("/api" -> "http://localhost:8686/api") hoặc biến môi trường
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+// Sử dụng proxy của Vite ("/api" -> "http://localhost:8686/api") để định tuyến qua API Gateway
+const API_BASE_URL = "/api";
 
-export const api = axios.create({
+const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
+  // Timeout mặc định 30 giây cho các request thông thường
+  timeout: 30000,
 });
 
-// ── 1. REQUEST INTERCEPTOR: TỰ ĐỘNG GẮN ADMIN ACCESS TOKEN ───────────────────
+// Interceptor cho Request: Tự động đính kèm JWT Bearer Token của Admin
 api.interceptors.request.use(
   (config) => {
     const token = useAuthStore.getState().accessToken;
@@ -22,7 +22,8 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Nếu gửi FormData (upload file/ảnh), gỡ Content-Type để axios/browser tự sinh multipart boundary
+    // Tự động gỡ bỏ header Content-Type mặc định nếu request gửi FormData
+    // để Axios và trình duyệt tự động thiết lập "multipart/form-data; boundary=..." chính xác
     if (config.data instanceof FormData && config.headers) {
       if (typeof config.headers.delete === "function") {
         config.headers.delete("Content-Type");
@@ -40,7 +41,6 @@ api.interceptors.request.use(
   }
 );
 
-// ── 2. RESPONSE INTERCEPTOR: XỬ LÝ LỖI TOÀN CỤC & TỰ ĐỘNG LÀM MỚI TOKEN (401/403) ──
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -55,6 +55,7 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+// Interceptor cho Response: Xử lý refresh token âm thầm khi gặp mã lỗi 401
 api.interceptors.response.use(
   (response) => {
     return response;
@@ -65,26 +66,9 @@ api.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
 
-      // --- Xử lý 403 Forbidden: Không đủ quyền quản trị ---
-      if (status === 403) {
-        const forbiddenMsg =
-          error.response?.data?.message ||
-          "Tài khoản của bạn không có quyền thực hiện thao tác này.";
-        console.warn("[Admin API] 403 Forbidden:", forbiddenMsg);
-        showErrorToast(forbiddenMsg);
-
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("mc-admin-forbidden", {
-              detail: { message: forbiddenMsg },
-            })
-          );
-        }
-      }
-
-      // --- Xử lý 401 Unauthorized: Token hết hạn, tự động Refresh Token ---
+      // Xử lý khi Token hết hạn (401)
       if (status === 401 && originalRequest && !originalRequest._retry) {
-        // Nếu lỗi xảy ra tại chính các endpoint auth (login, refresh, logout), không thử refresh lại
+        // Nếu 401 xảy ra tại các endpoint auth của admin (login, refresh, logout), không thử lại
         const isAuthEndpoint = originalRequest.url?.includes("/admin/auth/");
         if (isAuthEndpoint) {
           return Promise.reject(error);
@@ -92,15 +76,13 @@ api.interceptors.response.use(
 
         const { refreshToken, logout, setTokens } = useAuthStore.getState();
 
-        // Không có refresh token -> đăng xuất người dùng
         if (!refreshToken) {
           logout();
-          showErrorToast("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.");
           return Promise.reject(error);
         }
 
-        // Nếu đã có một tiến trình refresh đang chạy, xếp request hiện tại vào hàng đợi
         if (isRefreshing) {
+          // Nếu đang trong tiến trình làm mới token, đưa request vào hàng đợi chờ
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
           })
@@ -115,7 +97,7 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-          // Gọi API Refresh Token của admin thông qua instance axios độc lập (tránh đệ quy interceptor)
+          // Gọi API refresh token trực tiếp bằng instance axios độc lập để tránh lặp vô tận
           const res = await axios.post(`${API_BASE_URL}/admin/auth/refresh`, {
             refreshToken,
           });
@@ -135,12 +117,17 @@ api.interceptors.response.use(
         } catch (refreshErr) {
           processQueue(refreshErr, null);
           logout();
-          showErrorToast("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.");
           return Promise.reject(refreshErr);
         } finally {
           isRefreshing = false;
         }
+      } else if (status === 403) {
+        console.warn("Truy cập bị từ chối: Tài khoản không có quyền Admin thực hiện thao tác này.");
+      } else if (status >= 500) {
+        console.error("Lỗi máy chủ nội bộ. Vui lòng thử lại sau.");
       }
+    } else if (error.request) {
+      console.error("Lỗi mạng: Không nhận được phản hồi từ Gateway/Server.");
     }
 
     return Promise.reject(error);
@@ -148,3 +135,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+

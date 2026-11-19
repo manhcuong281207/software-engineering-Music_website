@@ -1,11 +1,11 @@
 import api from "../lib/axios";
 
 /**
- * Lấy danh sách Nghệ sĩ có phân trang và sắp xếp
- * @param {Object} params - { page, size, sort }
- * @returns {Promise<Object>}
+ * Lấy danh sách nghệ sĩ hệ thống (Artist)
+ * @param {Object} params - { page = 0, size = 10, sort }
  */
-export const getArtistsApi = async ({ page = 0, size = 10, sort = "createdAt,desc" } = {}) => {
+export const getArtistsApi = async (params = {}) => {
+  const { page = 0, size = 10, sort } = params;
   const response = await api.get("/admin/artists", {
     params: { page, size, sort },
   });
@@ -13,25 +13,21 @@ export const getArtistsApi = async ({ page = 0, size = 10, sort = "createdAt,des
 };
 
 /**
- * Lấy thông tin chi tiết một Nghệ sĩ theo ID
- * @param {string} id - UUID của nghệ sĩ
- * @returns {Promise<Object>}
+ * Lấy thông tin chi tiết nghệ sĩ
+ * @param {string} id - UUID nghệ sĩ
  */
-export const getArtistDetailApi = async (id) => {
+export const getArtistByIdApi = async (id) => {
   const response = await api.get(`/admin/artists/${id}`);
   return response.data;
 };
 
 /**
- * Khóa hoặc Mở khóa tài khoản Nghệ sĩ
- * @param {string} id - UUID của nghệ sĩ
+ * Khóa hoặc Mở khóa tài khoản nghệ sĩ
+ * @param {string} id - UUID nghệ sĩ
  * @param {boolean} isActive - true: mở khóa, false: khóa
- * @returns {Promise<Object>}
  */
-export const toggleArtistStatusApi = async (id, isActive) => {
-  const response = await api.patch(`/admin/artists/${id}/status`, {
-    isActive,
-  });
+export const updateArtistStatusApi = async (id, isActive) => {
+  const response = await api.patch(`/admin/artists/${id}/status`, { isActive });
   return response.data;
 };
 

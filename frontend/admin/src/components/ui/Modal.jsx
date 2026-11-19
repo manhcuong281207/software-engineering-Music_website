@@ -5,21 +5,29 @@ export const Modal = ({
   isOpen,
   onClose,
   title,
+  description,
   children,
-  maxWidth = "max-w-md",
+  maxWidth = "max-w-lg",
+  closeOnOverlayClick = true,
+  showCloseButton = true,
+  className = "",
 }) => {
+  // Đóng modal khi nhấn phím ESC và khóa cuộn body khi mở modal
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
+      if (e.key === "Escape") {
+        onClose?.();
       }
     };
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeyDown);
-    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
@@ -27,29 +35,53 @@ export const Modal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+      {/* Lớp nền mờ Backdrop */}
       <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
+        className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-200"
+        onClick={() => closeOnOverlayClick && onClose?.()}
+        aria-hidden="true"
       />
 
-      {/* Modal Dialog */}
+      {/* Hộp thoại Modal */}
       <div
-        className={`relative w-full ${maxWidth} rounded-2xl bg-[#181818] border border-neutral-800 shadow-2xl p-6 z-10 animate-in fade-in zoom-in-95 duration-200`}
-        onClick={(e) => e.stopPropagation()}
+        className={`relative w-full ${maxWidth} bg-[#181818] border border-white/[0.08] rounded-2xl shadow-[0_24px_50px_rgba(0,0,0,0.95)] z-10 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${className}`}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="flex items-center justify-between pb-4 border-b border-neutral-800/80 mb-4">
-          <h3 className="text-lg font-bold text-white">{title}</h3>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
+        {/* Header Modal */}
+        {(title || showCloseButton) && (
+          <div className="flex items-start justify-between px-6 pt-6 pb-4 bg-white/[0.02] border-b border-white/[0.04]">
+            <div>
+              {title && (
+                <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                  {title}
+                </h3>
+              )}
+              {description && (
+                <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+                  {description}
+                </p>
+              )}
+            </div>
 
-        <div>{children}</div>
+            {showCloseButton && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex-shrink-0 ml-4"
+                title="Đóng (ESC)"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Thân Modal */}
+        <div className="p-6 overflow-y-auto max-h-[calc(85vh-120px)] scrollbar-thin">
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* Spotify Red Neon Palette */
+  /* Spotify Red Theme Palette */
   --color-spotify-black: #000000;
   --color-spotify-base: #121212;
   --color-spotify-card: #181818;
@@ -48,4 +48,3 @@
     @apply bg-spotify-black text-spotify-text font-sans antialiased overflow-x-hidden;
   }
 }
-

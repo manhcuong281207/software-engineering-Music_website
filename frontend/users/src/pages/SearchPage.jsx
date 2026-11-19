@@ -1,1187 +1,500 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Play, Pause, Music2 } from "lucide-react";
 import {
-  Compass,
-  Search,
-  Sparkles,
-  Play,
-  ArrowLeft,
-  Music2,
-  Disc3,
-  Flame,
-  Zap,
-  Coffee,
-  Heart,
-  Radio,
-  Mic2,
-  Star,
-  Globe,
-  Shuffle,
-  AlertCircle,
-  RefreshCw,
-  X,
-  SearchX,
-  ArrowUpDown,
-  Filter,
-} from "lucide-react";
-import { toast } from "sonner";
-
-import {
-  getPublicGenres,
-  getPublicSongs,
-  getPublicAlbums,
-  getArtistSongs,
-  getAlbumSongs,
   searchCatalogApi,
+  getPublicGenres,
+  getSongById,
 } from "../api/catalog/public";
-import { getPublicArtists } from "../api/artists/public";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { SongRow } from "../components/ui/SongRow";
+import { useFavorites } from "../hooks/useFavorites";
 import { CoverImage } from "../components/ui/CoverImage";
-import { ArtistCard } from "../components/ui/ArtistCard";
-import { AlbumCard } from "../components/ui/AlbumCard";
-import { TopResultCard } from "../components/search/TopResultCard";
-import { Pagination } from "../components/ui/Pagination";
-import { SkeletonCard, SkeletonRow } from "../components/ui/Skeleton";
+import { Button } from "../components/ui/Button";
+import { AddToPlaylistMenu } from "../components/playlist/AddToPlaylistMenu";
 
-// Bảng màu & biểu tượng đặc trưng chuẩn Spotify cho từng thể loại
-const GENRE_STYLE_MAP = {
-  pop: {
-    bgClass: "from-[#ec1e7b] to-[#a30b50]",
-    accentColor: "#ec1e7b",
-    icon: Sparkles,
-    badge: "Sôi động & Bắt tai",
-  },
-  ballad: {
-    bgClass: "from-[#1e824c] to-[#0f4d2a]",
-    accentColor: "#1e824c",
-    icon: Heart,
-    badge: "Sâu lắng & Cảm xúc",
-  },
-  "r&b": {
-    bgClass: "from-[#8c1932] to-[#590f20]",
-    accentColor: "#8c1932",
-    icon: Flame,
-    badge: "Mượt mà & Nhịp điệu",
-  },
-  "hip-hop": {
-    bgClass: "from-[#bc5900] to-[#7a3b00]",
-    accentColor: "#bc5900",
-    icon: Radio,
-    badge: "Chất đường phố",
-  },
-  rap: {
-    bgClass: "from-[#d83f2a] to-[#8d1e0e]",
-    accentColor: "#d83f2a",
-    icon: Mic2,
-    badge: "Flow & Câu từ",
-  },
-  edm: {
-    bgClass: "from-[#0d72ed] to-[#08428d]",
-    accentColor: "#0d72ed",
-    icon: Zap,
-    badge: "Năng lượng & Bùng nổ",
-  },
-  lofi: {
-    bgClass: "from-[#8400e7] to-[#4c0087]",
-    accentColor: "#8400e7",
-    icon: Coffee,
-    badge: "Thư giãn & Tập trung",
-  },
-  jazz: {
-    bgClass: "from-[#477d95] to-[#264958]",
-    accentColor: "#477d95",
-    icon: Disc3,
-    badge: "Cổ điển & Tinh tế",
-  },
-  indie: {
-    bgClass: "from-[#608108] to-[#3a4e05]",
-    accentColor: "#608108",
-    icon: Compass,
-    badge: "Độc lập & Tự do",
-  },
-  acoustic: {
-    bgClass: "from-[#af2896] to-[#6d185e]",
-    accentColor: "#af2896",
-    icon: Music2,
-    badge: "Mộc mạc & Chân thật",
-  },
-  "k-pop": {
-    bgClass: "from-[#e1118c] to-[#920959]",
-    accentColor: "#e1118c",
-    icon: Star,
-    badge: "Thịnh hành & Hút mắt",
-  },
-  "us-uk": {
-    bgClass: "from-[#3b5998] to-[#1d2f53]",
-    accentColor: "#3b5998",
-    icon: Globe,
-    badge: "Quốc tế & Đỉnh cao",
-  },
-};
-
-// Fallback gradient ngẫu nhiên nhưng ổn định cho các thể loại mới
-const FALLBACK_GRADIENTS = [
-  { bgClass: "from-[#e0223e] to-[#800d1e]", accentColor: "#e0223e" },
-  { bgClass: "from-[#3b82f6] to-[#1d4ed8]", accentColor: "#3b82f6" },
-  { bgClass: "from-[#10b981] to-[#047857]", accentColor: "#10b981" },
-  { bgClass: "from-[#f59e0b] to-[#b45309]", accentColor: "#f59e0b" },
-  { bgClass: "from-[#8b5cf6] to-[#6d28d9]", accentColor: "#8b5cf6" },
-  { bgClass: "from-[#ec4899] to-[#be185d]", accentColor: "#ec4899" },
+// ─── Màu gradient ngẫu nhiên cho card thể loại ─────────────────────────────
+const GENRE_GRADIENTS = [
+  "from-[#1a53ff] to-[#0d2aa3]",
+  "from-[#e91429] to-[#8c0c19]",
+  "from-[#1db954] to-[#0f6b30]",
+  "from-[#ff5a00] to-[#a33600]",
+  "from-[#9b59b6] to-[#5e2f8e]",
+  "from-[#00bcd4] to-[#006e80]",
+  "from-[#e91e8c] to-[#9b0055]",
+  "from-[#ff9800] to-[#b36200]",
+  "from-[#607d8b] to-[#37474f]",
+  "from-[#795548] to-[#4e342e]",
+  "from-[#2196f3] to-[#0d47a1]",
+  "from-[#4caf50] to-[#1b5e20]",
 ];
 
-const getGenreStyle = (name = "") => {
-  const normalized = name.toLowerCase().trim();
-  if (GENRE_STYLE_MAP[normalized]) {
-    return GENRE_STYLE_MAP[normalized];
-  }
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % FALLBACK_GRADIENTS.length;
-  return {
-    ...FALLBACK_GRADIENTS[index],
-    icon: Music2,
-    badge: "Giai điệu tuyển chọn",
-  };
-};
-
-// Cấu hình các Tabs tìm kiếm
-const SEARCH_TABS = [
+// ─── FilterTab chips ─────────────────────────────────────────────────────────
+const FILTER_TABS = [
   { id: "all", label: "Tất cả" },
   { id: "songs", label: "Bài hát" },
   { id: "artists", label: "Nghệ sĩ" },
   { id: "albums", label: "Album" },
 ];
 
-// Cấu hình sắp xếp cho từng Tab
-const SONG_SORT_OPTIONS = [
-  { value: "playCount,desc", label: "Nhiều lượt nghe nhất" },
-  { value: "likeCount,desc", label: "Yêu thích nhất" },
-  { value: "createdAt,desc", label: "Mới nhất" },
-  { value: "title,asc", label: "Tên bài hát (A-Z)" },
-];
+// ─── Skeleton components ─────────────────────────────────────────────────────
+const SkeletonGenreCard = () => (
+  <div className="rounded-xl overflow-hidden h-24 animate-pulse bg-neutral-800" />
+);
 
-const ARTIST_SORT_OPTIONS = [
-  { value: "followerCount,desc", label: "Nhiều người theo dõi nhất" },
-  { value: "createdAt,desc", label: "Mới tham gia" },
-  { value: "stageName,asc", label: "Tên nghệ sĩ (A-Z)" },
-];
+const SkeletonResultRow = () => (
+  <div className="flex items-center gap-3 px-2 py-2 animate-pulse">
+    <div className="w-10 h-10 rounded bg-neutral-800 flex-shrink-0" />
+    <div className="flex flex-col gap-1.5 flex-1">
+      <div className="h-3 bg-neutral-800 rounded w-2/3" />
+      <div className="h-2.5 bg-neutral-800/70 rounded w-1/3" />
+    </div>
+  </div>
+);
 
-const ALBUM_SORT_OPTIONS = [
-  { value: "likeCount,desc", label: "Yêu thích nhất" },
-  { value: "createdAt,desc", label: "Mới phát hành" },
-  { value: "title,asc", label: "Tên album (A-Z)" },
-];
+// ─── Format duration ─────────────────────────────────────────────────────────
+const formatDuration = (seconds) => {
+  if (!seconds) return "";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
 
 export const SearchPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
   const keyword = searchParams.get("q") || "";
-  const genreParam = searchParams.get("genre") || "";
-  const activeTab = searchParams.get("type") || "all";
-  const pageParam = parseInt(searchParams.get("page") || "0", 10);
-  const sortParam = searchParams.get("sort") || "";
 
-  const { playSongWithContext, currentSong, isPlaying } = usePlayerStore();
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [loadingSongId, setLoadingSongId] = useState(null);
 
-  // ─── 1. Xử lý Thể loại Nhạc ──────────────────────────────────────────────────
-  const {
-    data: genresResponse,
-    isLoading: isLoadingGenres,
-    isError: isErrorGenres,
-    refetch: refetchGenres,
-  } = useQuery({
+  const { currentSong, isPlaying, setIsPlaying, playSongWithContext } = usePlayerStore();
+  const { isFavoriteSong, toggleFavoriteSong } = useFavorites();
+
+  // Reset filter khi keyword thay đổi
+  useEffect(() => {
+    setActiveFilter("all");
+  }, [keyword]);
+
+  // ── 1. Fetch thể loại (luôn fetch để dùng ở Browse Mode) ──────────────────
+  const { data: genresData, isLoading: isLoadingGenres } = useQuery({
     queryKey: ["publicGenres"],
     queryFn: getPublicGenres,
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 10, // 10 phút
   });
 
-  const genres = useMemo(() => genresResponse?.data || [], [genresResponse]);
+  const genres = useMemo(() => genresData?.data || [], [genresData]);
 
-  const selectedGenre = useMemo(() => {
-    if (!genreParam || genres.length === 0) return null;
+  // ── 2. Fetch kết quả tìm kiếm (chỉ khi có keyword) ───────────────────────
+  const { data: searchData, isLoading: isLoadingSearch } = useQuery({
+    queryKey: ["unifiedSearch", keyword],
+    queryFn: () => searchCatalogApi(keyword, 8),
+    enabled: keyword.trim().length > 0,
+    staleTime: 1000 * 30, // 30 giây
+  });
+
+  const searchResult = useMemo(() => searchData?.data || null, [searchData]);
+  const topResult = searchResult?.topResult || null;
+  const songs = searchResult?.songs || [];
+  const albums = searchResult?.albums || [];
+  const artists = searchResult?.artists || [];
+
+  const hasAnyResult = songs.length > 0 || albums.length > 0 || artists.length > 0 || topResult;
+
+  // ── 3. Phát nhạc ──────────────────────────────────────────────────────────
+  const handlePlaySong = async (song, pool = []) => {
+    const songId = song?.id || song?.songId;
+    if (!songId) return;
+
+    // Nếu đang phát bài này rồi thì toggle
+    if (currentSong?.id === songId) {
+      setIsPlaying(!isPlaying);
+      return;
+    }
+
+    try {
+      setLoadingSongId(songId);
+      const res = await getSongById(songId);
+      const fullSong = res?.data;
+      if (fullSong) {
+        const contextPool = pool.length > 0 ? pool : [fullSong];
+        const idx = contextPool.findIndex((s) => (s.id || s.songId) === songId);
+        playSongWithContext(fullSong, contextPool, Math.max(0, idx));
+      }
+    } catch (err) {
+      console.error("Lỗi phát bài hát từ kết quả tìm kiếm:", err);
+    } finally {
+      setLoadingSongId(null);
+    }
+  };
+
+  // ── 4. Pool bài hát cho play-all context ─────────────────────────────────
+  const songsPool = useMemo(() =>
+    songs.map((s) => ({
+      id: s.id,
+      title: s.title,
+      artistName: s.ownerName,
+      coverImage: s.coverImage,
+    })), [searchResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: BROWSE MODE (chưa nhập keyword)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (!keyword.trim()) {
     return (
-      genres.find(
-        (g) => g.id === genreParam || g.name.toLowerCase() === genreParam.toLowerCase()
-      ) || null
-    );
-  }, [genreParam, genres]);
+      <div className="flex flex-col pb-24 min-h-full px-6 pt-6">
+        <h1 className="text-3xl font-black text-white mb-6">Duyệt tìm tất cả</h1>
 
-  const {
-    data: genreSongsResponse,
-    isLoading: isLoadingGenreSongs,
-  } = useQuery({
-    queryKey: ["genreSongs", selectedGenre?.id],
-    queryFn: () =>
-      getPublicSongs({
-        genreId: selectedGenre.id,
-        size: 50,
-        sort: "playCount,desc",
-      }),
-    enabled: !!selectedGenre?.id,
-  });
-
-  const genreSongs = useMemo(
-    () => genreSongsResponse?.data?.content || [],
-    [genreSongsResponse]
-  );
-
-  // ─── 2. Tải kết quả Unified Search (Tab "Tất cả") ─────────────────────────────
-  const hasKeyword = keyword.trim().length > 0;
-
-  const {
-    data: unifiedSearchResponse,
-    isLoading: isLoadingUnified,
-    isError: isErrorUnified,
-    refetch: refetchUnified,
-  } = useQuery({
-    queryKey: ["catalogUnifiedSearch", keyword],
-    queryFn: () => searchCatalogApi(keyword, 10),
-    enabled: hasKeyword && activeTab === "all",
-    staleTime: 1000 * 60 * 2,
-  });
-
-  const unifiedData = unifiedSearchResponse?.data;
-  const topResult = unifiedData?.topResult;
-  const unifiedSongs = unifiedData?.songs || [];
-  const unifiedArtists = unifiedData?.artists || [];
-  const unifiedAlbums = unifiedData?.albums || [];
-
-  // ─── 3. Tích hợp API tìm kiếm riêng lẻ Bài hát (Tab "Bài hát") ────────────────
-  const songSort = sortParam || "playCount,desc";
-  const {
-    data: songsSearchResponse,
-    isLoading: isLoadingSongsSearch,
-    isError: isErrorSongsSearch,
-  } = useQuery({
-    queryKey: ["searchIndividualSongs", keyword, pageParam, songSort],
-    queryFn: () =>
-      getPublicSongs({
-        keyword: keyword.trim(),
-        page: pageParam,
-        size: 20,
-        sort: songSort,
-      }),
-    enabled: hasKeyword && activeTab === "songs",
-    staleTime: 1000 * 60 * 2,
-  });
-
-  const songsPageData = songsSearchResponse?.data;
-  const individualSongs = songsPageData?.content || [];
-  const songsTotalPages = songsPageData?.totalPages || 0;
-  const songsTotalElements = songsPageData?.totalElements || 0;
-
-  // ─── 4. Tích hợp API tìm kiếm riêng lẻ Nghệ sĩ (Tab "Nghệ sĩ") ────────────────
-  const artistSort = sortParam || "followerCount,desc";
-  const {
-    data: artistsSearchResponse,
-    isLoading: isLoadingArtistsSearch,
-    isError: isErrorArtistsSearch,
-  } = useQuery({
-    queryKey: ["searchIndividualArtists", keyword, pageParam, artistSort],
-    queryFn: () =>
-      getPublicArtists({
-        keyword: keyword.trim(),
-        page: pageParam,
-        size: 18,
-        sort: artistSort,
-      }),
-    enabled: hasKeyword && activeTab === "artists",
-    staleTime: 1000 * 60 * 2,
-  });
-
-  const artistsPageData = artistsSearchResponse?.data;
-  const individualArtists = artistsPageData?.content || [];
-  const artistsTotalPages = artistsPageData?.totalPages || 0;
-  const artistsTotalElements = artistsPageData?.totalElements || 0;
-
-  // ─── 5. Tích hợp API tìm kiếm riêng lẻ Album (Tab "Album") ────────────────────
-  const albumSort = sortParam || "likeCount,desc";
-  const {
-    data: albumsSearchResponse,
-    isLoading: isLoadingAlbumsSearch,
-    isError: isErrorAlbumsSearch,
-  } = useQuery({
-    queryKey: ["searchIndividualAlbums", keyword, pageParam, albumSort],
-    queryFn: () =>
-      getPublicAlbums({
-        keyword: keyword.trim(),
-        page: pageParam,
-        size: 18,
-        sort: albumSort,
-      }),
-    enabled: hasKeyword && activeTab === "albums",
-    staleTime: 1000 * 60 * 2,
-  });
-
-  const albumsPageData = albumsSearchResponse?.data;
-  const individualAlbums = albumsPageData?.content || [];
-  const albumsTotalPages = albumsPageData?.totalPages || 0;
-  const albumsTotalElements = albumsPageData?.totalElements || 0;
-
-  // ─── Handlers điều hướng & bộ lọc ───────────────────────────────────────────
-  const handleTabChange = (tabId) => {
-    const next = new URLSearchParams(searchParams);
-    if (tabId === "all") {
-      next.delete("type");
-    } else {
-      next.set("type", tabId);
-    }
-    next.delete("page");
-    next.delete("sort");
-    setSearchParams(next);
-  };
-
-  const handlePageChange = (newPage) => {
-    const next = new URLSearchParams(searchParams);
-    if (newPage === 0) {
-      next.delete("page");
-    } else {
-      next.set("page", String(newPage));
-    }
-    setSearchParams(next);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleSortChange = (newSort) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("sort", newSort);
-    next.delete("page"); // Reset về trang đầu khi đổi cách sắp xếp
-    setSearchParams(next);
-  };
-
-  const handleClearSearch = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete("q");
-    next.delete("type");
-    next.delete("page");
-    next.delete("sort");
-    setSearchParams(next);
-  };
-
-  const handleSelectGenre = (genre) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("genre", genre.id);
-    setSearchParams(next);
-  };
-
-  const handleBackToAllGenres = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete("genre");
-    setSearchParams(next);
-  };
-
-  // ─── Handlers phát nhạc thông minh ──────────────────────────────────────────
-  const handlePlaySongItem = (song, songList = [], index = 0) => {
-    if (!song) return;
-    const list = songList.length > 0 ? songList : [song];
-    playSongWithContext(song, list, index);
-  };
-
-  const handlePlayArtist = async (artist) => {
-    if (!artist?.id) return;
-    try {
-      const res = await getArtistSongs(artist.id, {
-        size: 50,
-        sort: "likeCount,desc",
-      });
-      const songs = res?.data?.content || [];
-      if (songs.length > 0) {
-        const randomIndex = Math.floor(Math.random() * songs.length);
-        playSongWithContext(songs[randomIndex], songs, randomIndex);
-        toast.success(`Đang phát nhạc của nghệ sĩ ${artist.stageName || "này"}`);
-      } else {
-        toast.info(`Nghệ sĩ ${artist.stageName || ""} chưa có bài hát khả dụng`);
-      }
-    } catch (err) {
-      console.error("Lỗi khi phát nhạc nghệ sĩ:", err);
-      toast.error("Không thể phát nhạc nghệ sĩ vào lúc này");
-    }
-  };
-
-  const handlePlayAlbum = async (album) => {
-    if (!album?.id) return;
-    try {
-      const res = await getAlbumSongs(album.id, {
-        size: 50,
-        sort: "createdAt,asc",
-      });
-      const songs = res?.data?.content || [];
-      if (songs.length > 0) {
-        playSongWithContext(songs[0], songs, 0);
-        toast.success(`Đang phát album "${album.title || ""}"`);
-      } else {
-        toast.info(`Album "${album.title || ""}" chưa có bài hát khả dụng`);
-      }
-    } catch (err) {
-      console.error("Lỗi khi phát album:", err);
-      toast.error("Không thể phát album vào lúc này");
-    }
-  };
-
-  const handlePlayGenreAll = (isRandom = false) => {
-    if (!genreSongs || genreSongs.length === 0) return;
-    const startIndex = isRandom
-      ? Math.floor(Math.random() * genreSongs.length)
-      : 0;
-    playSongWithContext(genreSongs[startIndex], genreSongs, startIndex);
-  };
-
-  return (
-    <div className="min-h-full pb-20">
-      {/* =========================================================================
-          TRƯỜNG HỢP 1: ĐANG TÌM KIẾM THEO TỪ KHÓA (hasKeyword = true)
-         ========================================================================= */}
-      {hasKeyword ? (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Header kết quả tìm kiếm */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
-            <div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-spotify-sub mb-1">
-                <Search size={14} className="text-[#fa2d48]" />
-                <span>Kết quả tìm kiếm cho</span>
-              </div>
-              <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight break-words">
-                "{keyword}"
-              </h1>
-            </div>
-
-            <button
-              onClick={handleClearSearch}
-              className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-neutral-300 hover:text-white transition-all cursor-pointer border border-white/5 active:scale-95"
-            >
-              <X size={14} />
-              Xóa tìm kiếm
-            </button>
+        {isLoadingGenres ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <SkeletonGenreCard key={i} />
+            ))}
           </div>
-
-          {/* Thanh Tabs phân loại kết quả (Tất cả, Bài hát, Nghệ sĩ, Album) */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {SEARCH_TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer whitespace-nowrap select-none ${
-                    isActive
-                      ? "bg-white text-black shadow-lg scale-105"
-                      : "bg-[#1e1e1e] hover:bg-[#282828] text-neutral-300 hover:text-white border border-white/5"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* =====================================================================
-              TAB 1: TẤT CẢ (UNIFIED SEARCH) - HIỂN THỊ THEO MỨC ĐỘ ƯU TIÊN
-             ===================================================================== */}
-          {activeTab === "all" && (
-            <div className="space-y-10">
-              {isLoadingUnified ? (
-                /* Skeleton Loading cho Unified Search */
-                <div className="space-y-8">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <div className="lg:col-span-5 h-72 rounded-2xl bg-[#181818] animate-pulse" />
-                    <div className="lg:col-span-7 space-y-2">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="h-14 rounded-lg bg-[#181818] animate-pulse" />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="h-6 w-32 bg-[#181818] animate-pulse rounded" />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {[...Array(6)].map((_, i) => (
-                        <div key={i} className="h-44 rounded-xl bg-[#181818] animate-pulse" />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : isErrorUnified ? (
-                /* Lỗi gọi API Unified Search */
-                <div className="p-6 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
-                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
-                  <h3 className="text-lg font-bold text-white mb-1">
-                    Đã xảy ra lỗi khi tìm kiếm
-                  </h3>
-                  <p className="text-red-200 text-sm mb-4">
-                    Không thể kết nối đến máy chủ tìm kiếm. Vui lòng thử lại sau.
-                  </p>
-                  <button
-                    onClick={() => refetchUnified()}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-red-800/50 hover:bg-red-800 text-xs font-bold text-white transition-all cursor-pointer"
-                  >
-                    <RefreshCw size={14} /> Thử lại
-                  </button>
-                </div>
-              ) : !topResult &&
-                unifiedSongs.length === 0 &&
-                unifiedArtists.length === 0 &&
-                unifiedAlbums.length === 0 ? (
-                /* Trạng thái không có kết quả */
-                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
-                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    Không tìm thấy kết quả phù hợp cho "{keyword}"
-                  </h3>
-                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
-                    Hãy kiểm tra lại chính tả hoặc thử tìm kiếm với tên nghệ sĩ, bài hát hoặc thể loại khác.
-                  </p>
-                </div>
-              ) : (
-                /* Kết quả Unified Search phong phú */
-                <div className="space-y-10">
-                  {/* Hàng 1: Kết quả hàng đầu (Top Result) & Top Bài hát */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-                    {/* Top Result Card - Hiển thị ở vị trí ưu tiên cao nhất */}
-                    {topResult && (
-                      <div className="lg:col-span-5 flex flex-col">
-                        <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">
-                          Kết quả hàng đầu
-                        </h2>
-                        <TopResultCard
-                          topResult={topResult}
-                          onPlaySong={(song) => handlePlaySongItem(song, unifiedSongs)}
-                          onPlayArtist={handlePlayArtist}
-                          onPlayAlbum={handlePlayAlbum}
-                          className="flex-1"
-                        />
-                      </div>
-                    )}
-
-                    {/* Danh sách bài hát hàng đầu */}
-                    <div
-                      className={`flex flex-col ${
-                        topResult ? "lg:col-span-7" : "lg:col-span-12"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl sm:text-2xl font-bold text-white">
-                          Bài hát
-                        </h2>
-                        {unifiedSongs.length > 0 && (
-                          <button
-                            onClick={() => handleTabChange("songs")}
-                            className="text-xs sm:text-sm font-bold text-spotify-sub hover:text-white transition-colors cursor-pointer"
-                          >
-                            Xem tất cả
-                          </button>
-                        )}
-                      </div>
-
-                      {unifiedSongs.length > 0 ? (
-                        <div className="space-y-1 bg-[#141414]/60 p-2 sm:p-3 rounded-2xl border border-white/5 flex-1">
-                          {unifiedSongs.slice(0, 5).map((song, idx) => (
-                            <SongRow
-                              key={song.id}
-                              index={idx + 1}
-                              song={song}
-                              isPlaying={isPlaying && currentSong?.id === song.id}
-                              onPlayClick={() =>
-                                handlePlaySongItem(song, unifiedSongs, idx)
-                              }
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-8 rounded-2xl bg-[#141414] border border-white/5 text-center text-spotify-sub text-sm flex-1 flex items-center justify-center">
-                          Không tìm thấy bài hát nào khớp.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Hàng 2: Nghệ sĩ phù hợp */}
-                  {unifiedArtists.length > 0 && (
-                    <section className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-xl sm:text-2xl font-bold text-white">
-                            Nghệ sĩ
-                          </h2>
-                          <p className="text-xs sm:text-sm text-spotify-sub mt-0.5">
-                            Nghệ sĩ khớp với từ khóa tìm kiếm
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleTabChange("artists")}
-                          className="text-xs sm:text-sm font-bold text-spotify-sub hover:text-white transition-colors cursor-pointer"
-                        >
-                          Xem tất cả
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                        {unifiedArtists.slice(0, 6).map((artist) => (
-                          <ArtistCard
-                            key={artist.id}
-                            artist={artist}
-                            onPlayClick={handlePlayArtist}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  )}
-
-                  {/* Hàng 3: Album phù hợp */}
-                  {unifiedAlbums.length > 0 && (
-                    <section className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-xl sm:text-2xl font-bold text-white">
-                            Album & EP
-                          </h2>
-                          <p className="text-xs sm:text-sm text-spotify-sub mt-0.5">
-                            Bộ sưu tập album và single khớp với từ khóa
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleTabChange("albums")}
-                          className="text-xs sm:text-sm font-bold text-spotify-sub hover:text-white transition-colors cursor-pointer"
-                        >
-                          Xem tất cả
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                        {unifiedAlbums.slice(0, 6).map((album) => (
-                          <AlbumCard
-                            key={album.id}
-                            album={album}
-                            onPlayClick={handlePlayAlbum}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* =====================================================================
-              TAB 2: BÀI HÁT (SONGS) - TÍCH HỢP API TÌM KIẾM RIÊNG LẺ
-             ===================================================================== */}
-          {activeTab === "songs" && (
-            <div className="space-y-6">
-              {/* Header điều khiển sắp xếp và thống kê */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-4 rounded-xl border border-white/5">
-                <span className="text-xs sm:text-sm text-neutral-400">
-                  Tìm thấy{" "}
-                  <strong className="text-white">
-                    {songsTotalElements.toLocaleString("vi-VN")}
-                  </strong>{" "}
-                  bài hát phù hợp
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown size={14} className="text-spotify-sub" />
-                  <span className="text-xs text-spotify-sub">Sắp xếp:</span>
-                  <select
-                    value={songSort}
-                    onChange={(e) => handleSortChange(e.target.value)}
-                    className="bg-[#202020] hover:bg-[#282828] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 outline-none cursor-pointer transition-colors"
-                  >
-                    {SONG_SORT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value} className="bg-[#181818]">
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {isLoadingSongsSearch ? (
-                <div className="space-y-2">
-                  {[...Array(10)].map((_, i) => (
-                    <SkeletonRow key={i} />
-                  ))}
-                </div>
-              ) : isErrorSongsSearch ? (
-                <div className="p-8 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
-                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
-                  <h3 className="text-lg font-bold text-white mb-1">
-                    Lỗi tải danh sách bài hát
-                  </h3>
-                  <p className="text-red-200 text-sm">
-                    Không thể tìm kiếm bài hát lúc này. Vui lòng thử lại.
-                  </p>
-                </div>
-              ) : individualSongs.length === 0 ? (
-                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
-                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    Không tìm thấy bài hát nào
-                  </h3>
-                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
-                    Hãy thử từ khóa khác hoặc chuyển sang tab Tất cả để xem các gợi ý phù hợp.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <div className="space-y-1 bg-[#141414]/40 p-2 sm:p-3 rounded-2xl border border-white/5">
-                    {individualSongs.map((song, idx) => (
-                      <SongRow
-                        key={song.id}
-                        index={pageParam * 20 + idx + 1}
-                        song={song}
-                        isPlaying={isPlaying && currentSong?.id === song.id}
-                        onPlayClick={() =>
-                          handlePlaySongItem(song, individualSongs, idx)
-                        }
-                      />
-                    ))}
-                  </div>
-
-                  {/* Phân trang */}
-                  <Pagination
-                    currentPage={pageParam}
-                    totalPages={songsTotalPages}
-                    onPageChange={handlePageChange}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* =====================================================================
-              TAB 3: NGHỆ SĨ (ARTISTS) - TÍCH HỢP API TÌM KIẾM RIÊNG LẺ
-             ===================================================================== */}
-          {activeTab === "artists" && (
-            <div className="space-y-6">
-              {/* Header điều khiển sắp xếp và thống kê */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-4 rounded-xl border border-white/5">
-                <span className="text-xs sm:text-sm text-neutral-400">
-                  Tìm thấy{" "}
-                  <strong className="text-white">
-                    {artistsTotalElements.toLocaleString("vi-VN")}
-                  </strong>{" "}
-                  nghệ sĩ phù hợp
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown size={14} className="text-spotify-sub" />
-                  <span className="text-xs text-spotify-sub">Sắp xếp:</span>
-                  <select
-                    value={artistSort}
-                    onChange={(e) => handleSortChange(e.target.value)}
-                    className="bg-[#202020] hover:bg-[#282828] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 outline-none cursor-pointer transition-colors"
-                  >
-                    {ARTIST_SORT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value} className="bg-[#181818]">
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {isLoadingArtistsSearch ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {[...Array(12)].map((_, i) => (
-                    <SkeletonCard key={i} isArtist={true} />
-                  ))}
-                </div>
-              ) : isErrorArtistsSearch ? (
-                <div className="p-8 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
-                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
-                  <h3 className="text-lg font-bold text-white mb-1">
-                    Lỗi tải danh sách nghệ sĩ
-                  </h3>
-                  <p className="text-red-200 text-sm">
-                    Không thể tìm kiếm nghệ sĩ lúc này. Vui lòng thử lại.
-                  </p>
-                </div>
-              ) : individualArtists.length === 0 ? (
-                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
-                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    Không tìm thấy nghệ sĩ nào
-                  </h3>
-                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
-                    Không có nghệ sĩ nào khớp với từ khóa "{keyword}".
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                    {individualArtists.map((artist) => (
-                      <ArtistCard
-                        key={artist.id}
-                        artist={artist}
-                        onPlayClick={handlePlayArtist}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Phân trang */}
-                  <Pagination
-                    currentPage={pageParam}
-                    totalPages={artistsTotalPages}
-                    onPageChange={handlePageChange}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* =====================================================================
-              TAB 4: ALBUM (ALBUMS) - TÍCH HỢP API TÌM KIẾM RIÊNG LẺ
-             ===================================================================== */}
-          {activeTab === "albums" && (
-            <div className="space-y-6">
-              {/* Header điều khiển sắp xếp và thống kê */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-4 rounded-xl border border-white/5">
-                <span className="text-xs sm:text-sm text-neutral-400">
-                  Tìm thấy{" "}
-                  <strong className="text-white">
-                    {albumsTotalElements.toLocaleString("vi-VN")}
-                  </strong>{" "}
-                  album phù hợp
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown size={14} className="text-spotify-sub" />
-                  <span className="text-xs text-spotify-sub">Sắp xếp:</span>
-                  <select
-                    value={albumSort}
-                    onChange={(e) => handleSortChange(e.target.value)}
-                    className="bg-[#202020] hover:bg-[#282828] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 outline-none cursor-pointer transition-colors"
-                  >
-                    {ALBUM_SORT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value} className="bg-[#181818]">
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {isLoadingAlbumsSearch ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {[...Array(12)].map((_, i) => (
-                    <SkeletonCard key={i} isArtist={false} />
-                  ))}
-                </div>
-              ) : isErrorAlbumsSearch ? (
-                <div className="p-8 rounded-2xl bg-red-950/40 border border-red-800/60 text-center">
-                  <AlertCircle size={40} className="mx-auto text-red-400 mb-2" />
-                  <h3 className="text-lg font-bold text-white mb-1">
-                    Lỗi tải danh sách album
-                  </h3>
-                  <p className="text-red-200 text-sm">
-                    Không thể tìm kiếm album lúc này. Vui lòng thử lại.
-                  </p>
-                </div>
-              ) : individualAlbums.length === 0 ? (
-                <div className="text-center py-20 bg-[#141414] rounded-2xl border border-white/5 p-8">
-                  <SearchX size={52} className="mx-auto text-neutral-500 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    Không tìm thấy album nào
-                  </h3>
-                  <p className="text-spotify-sub max-w-md mx-auto text-sm">
-                    Không có album nào khớp với từ khóa "{keyword}".
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                    {individualAlbums.map((album) => (
-                      <AlbumCard
-                        key={album.id}
-                        album={album}
-                        onPlayClick={handlePlayAlbum}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Phân trang */}
-                  <Pagination
-                    currentPage={pageParam}
-                    totalPages={albumsTotalPages}
-                    onPageChange={handlePageChange}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : selectedGenre ? (
-        /* =========================================================================
-            TRƯỜNG HỢP 2: ĐANG XEM CHI TIẾT 1 THỂ LOẠI NHẠC
-           ========================================================================= */
-        <div className="space-y-8 animate-in fade-in duration-300">
-          {/* Header Banner cho thể loại */}
-          {(() => {
-            const style = getGenreStyle(selectedGenre.name);
-            const Icon = style.icon;
-            return (
+        ) : genres.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {genres.map((genre, i) => (
               <div
-                className={`relative overflow-hidden rounded-2xl p-6 sm:p-10 bg-gradient-to-br ${style.bgClass} shadow-2xl`}
+                key={genre.id}
+                onClick={() =>
+                  navigate(`/genre/${genre.id}`, {
+                    state: { genreId: genre.id, title: genre.name },
+                  })
+                }
+                className={`relative rounded-lg overflow-hidden cursor-pointer group transition-all hover:scale-[1.03] active:scale-[0.97] shadow-md bg-gradient-to-br ${GENRE_GRADIENTS[i % GENRE_GRADIENTS.length]}`}
+                style={{ height: '160px' }}
               >
-                {/* Nút quay lại */}
-                <button
-                  onClick={handleBackToAllGenres}
-                  className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-black/40 hover:bg-black/60 text-white text-sm font-semibold backdrop-blur-md transition-all cursor-pointer border border-white/10"
-                >
-                  <ArrowLeft size={16} />
-                  Tất cả thể loại
-                </button>
+                {/* Tên thể loại ở góc trên bên trái */}
+                <div className="absolute top-0 left-0 p-4 z-10">
+                  <span className="text-white font-black text-base leading-snug line-clamp-2 drop-shadow">
+                    {genre.name}
+                  </span>
+                </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 relative z-10">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
-                      Thể loại nhạc
-                    </span>
-                    <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight mt-3 mb-2 drop-shadow-lg">
-                      {selectedGenre.name}
-                    </h1>
-                    <p className="text-white/80 text-sm sm:text-base font-medium flex items-center gap-2">
-                      <Icon size={18} />
-                      {style.badge} • {genreSongs.length} bài hát nổi bật
+                {/* Ảnh bìa góc dưới bên phải, xoay 25°, tràn ra ngoài */}
+                {genre.coverImage && (
+                  <img
+                    src={genre.coverImage}
+                    alt={genre.name}
+                    className="absolute bottom-0 right-0 w-[90px] h-[90px] object-cover rounded-md shadow-2xl rotate-[25deg] translate-x-4 translate-y-4 transition-transform duration-300 group-hover:rotate-[20deg] group-hover:translate-x-3 group-hover:translate-y-3"
+                  />
+                )}
+
+                {/* Tối ảnh nhẹ khi hover */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-spotify-sub text-sm text-center py-16">
+            Chưa có thể loại nào.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: RESULTS MODE (có keyword)
+  // ═══════════════════════════════════════════════════════════════════════════
+  return (
+    <div className="flex flex-col pb-24 min-h-full px-6 pt-6">
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        {FILTER_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveFilter(tab.id)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
+              activeFilter === tab.id
+                ? "bg-white text-black"
+                : "bg-neutral-800 text-white hover:bg-neutral-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Loading State */}
+      {isLoadingSearch && (
+        <div className="space-y-6">
+          <div className="flex gap-6">
+            <div className="w-56 h-56 rounded-xl bg-neutral-800 animate-pulse flex-shrink-0" />
+            <div className="flex-1 flex flex-col gap-2">
+              {Array.from({ length: 5 }).map((_, i) => <SkeletonResultRow key={i} />)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoadingSearch && !hasAnyResult && (
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+          <Music2 size={64} className="text-neutral-600" />
+          <h2 className="text-xl font-bold text-white">
+            Không tìm thấy kết quả cho "{keyword}"
+          </h2>
+          <p className="text-spotify-sub text-sm max-w-sm">
+            Hãy kiểm tra lại chính tả hoặc thử tìm kiếm với từ khóa khác.
+          </p>
+        </div>
+      )}
+
+      {/* Results */}
+      {!isLoadingSearch && hasAnyResult && (
+        <div className="flex flex-col gap-10">
+
+          {/* ── Section: Kết quả hàng đầu + Bài hát ─────────────────────── */}
+          {(activeFilter === "all" || activeFilter === "songs" || activeFilter === "artists") && (
+            <div className={`flex flex-col ${activeFilter === "all" ? "lg:flex-row" : ""} gap-6`}>
+
+              {/* Top Result Card */}
+              {topResult && (activeFilter === "all" || (activeFilter === "artists" && topResult.type === "ARTIST")) && (
+                <div className="flex flex-col gap-3 lg:w-[280px] flex-shrink-0">
+                  <h2 className="text-xl font-bold text-white">Kết quả hàng đầu</h2>
+                  <TopResultCard
+                    topResult={topResult}
+                    loadingSongId={loadingSongId}
+                    onPlay={handlePlaySong}
+                    onNavigate={navigate}
+                    isPlaying={isPlaying}
+                    currentSong={currentSong}
+                  />
+                </div>
+              )}
+
+              {/* Bài hát */}
+              {songs.length > 0 && (activeFilter === "all" || activeFilter === "songs") && (
+                <div className="flex flex-col gap-3 flex-1 min-w-0">
+                  <h2 className="text-xl font-bold text-white">Bài hát</h2>
+                  <div className="flex flex-col">
+                    {songs.slice(0, activeFilter === "all" ? 5 : songs.length).map((song) => {
+                      const isCurrentSong = currentSong?.id === song.id;
+                      const isLoading = loadingSongId === song.id;
+                      const isLiked = isFavoriteSong(song.id);
+
+                      return (
+                        <div
+                          key={song.id}
+                          onClick={() => handlePlaySong(song, songsPool)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group transition-colors ${
+                            isCurrentSong ? "bg-[#282828]" : "hover:bg-[#1a1a1a]"
+                          }`}
+                        >
+                          {/* Ảnh bìa */}
+                          <div className="w-10 h-10 flex-shrink-0 relative">
+                            <CoverImage
+                              src={song.coverImage}
+                              alt={song.title}
+                              className="w-full h-full object-cover rounded"
+                            />
+                            {isLoading && (
+                              <div className="absolute inset-0 bg-black/60 rounded flex items-center justify-center">
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            )}
+                            {!isLoading && (
+                              <div className="absolute inset-0 bg-black/60 rounded opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                {isCurrentSong && isPlaying ? (
+                                  <Pause size={14} fill="white" className="text-white" />
+                                ) : (
+                                  <Play size={14} fill="white" className="text-white ml-0.5" />
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Thông tin bài hát */}
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className={`text-sm font-medium truncate ${isCurrentSong ? "text-[#fa2d48]" : "text-white"}`}>
+                              {song.title}
+                            </span>
+                            <span className="text-xs text-spotify-sub truncate">
+                              {song.ownerName}
+                            </span>
+                          </div>
+
+                          {/* Thời lượng + Actions */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {/* Like */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavoriteSong(song);
+                              }}
+                              className={`p-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 ${isLiked ? "opacity-100 text-[#fa2d48]" : "text-spotify-sub hover:text-white"}`}
+                              title={isLiked ? "Xóa khỏi yêu thích" : "Thêm vào yêu thích"}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"
+                                fill={isLiked ? "#fa2d48" : "none"} stroke={isLiked ? "#fa2d48" : "currentColor"}
+                                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                              </svg>
+                            </button>
+
+                            <span className="text-xs text-spotify-sub w-10 text-right">
+                              {formatDuration(song.durationSeconds)}
+                            </span>
+
+                            {/* Add to playlist */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <AddToPlaylistMenu song={song} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Section: Nghệ sĩ ─────────────────────────────────────────── */}
+          {artists.length > 0 && (activeFilter === "all" || activeFilter === "artists") && (
+            <section>
+              <h2 className="text-xl font-bold text-white mb-4">Nghệ sĩ</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {artists.map((artist) => (
+                  <div
+                    key={artist.id}
+                    onClick={() => navigate(`/artist/${artist.id}`)}
+                    className="bg-transparent hover:bg-spotify-hover transition-all p-3 rounded-lg cursor-pointer group"
+                  >
+                    <div className="relative mb-3">
+                      <CoverImage
+                        src={artist.avatarUrl}
+                        alt={artist.stageName}
+                        isArtist={true}
+                        className="w-full aspect-square object-cover rounded-full shadow-lg"
+                      />
+                      <Button
+                        variant="primary"
+                        size="md"
+                        iconOnly
+                        onClick={(e) => { e.stopPropagation(); }}
+                        className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 shadow-lg"
+                      >
+                        <Play size={20} className="fill-white text-white ml-0.5" />
+                      </Button>
+                    </div>
+                    <p className="text-white font-semibold text-sm truncate">{artist.stageName}</p>
+                    <p className="text-spotify-sub text-xs mt-0.5 truncate">Nghệ sĩ</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── Section: Album ─────────────────────────────────────────────── */}
+          {albums.length > 0 && (activeFilter === "all" || activeFilter === "albums") && (
+            <section>
+              <h2 className="text-xl font-bold text-white mb-4">Album</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {albums.map((album) => (
+                  <div
+                    key={album.id}
+                    onClick={() => navigate(`/album/${album.id}`)}
+                    className="bg-transparent hover:bg-spotify-hover transition-all p-3 rounded-lg cursor-pointer group"
+                  >
+                    <div className="relative mb-3">
+                      <CoverImage
+                        src={album.coverImage}
+                        alt={album.title}
+                        className="w-full aspect-square object-cover rounded-md shadow-lg"
+                      />
+                      <Button
+                        variant="primary"
+                        size="md"
+                        iconOnly
+                        onClick={(e) => { e.stopPropagation(); }}
+                        className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 shadow-lg"
+                      >
+                        <Play size={20} className="fill-white text-white ml-0.5" />
+                      </Button>
+                    </div>
+                    <p className="text-white font-semibold text-sm truncate">{album.title}</p>
+                    <p className="text-spotify-sub text-xs mt-0.5 truncate">
+                      {album.releaseDate ? new Date(album.releaseDate).getFullYear() : ""} • Album
                     </p>
                   </div>
-
-                  {/* Cụm nút Play thể loại */}
-                  {genreSongs.length > 0 && (
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handlePlayGenreAll(false)}
-                        className="flex items-center gap-2 px-6 py-3.5 rounded-full bg-[#fa2d48] hover:bg-[#e0223e] text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                      >
-                        <Play size={20} fill="currentColor" />
-                        Phát tất cả
-                      </button>
-                      <button
-                        onClick={() => handlePlayGenreAll(true)}
-                        className="p-3.5 rounded-full bg-black/40 hover:bg-black/60 text-white border border-white/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                        title="Phát ngẫu nhiên"
-                      >
-                        <Shuffle size={20} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Ảnh nền xoay góc trang trí */}
-                <div className="absolute -bottom-8 -right-8 w-48 h-48 sm:w-64 sm:h-64 rounded-2xl overflow-hidden shadow-2xl opacity-40 transform rotate-[20deg] pointer-events-none">
-                  {selectedGenre.coverImage ? (
-                    <img
-                      src={selectedGenre.coverImage}
-                      alt={selectedGenre.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-black/50 flex items-center justify-center">
-                      <Icon size={80} className="text-white/60" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Danh sách bài hát của thể loại */}
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">
-              Danh sách bài hát {selectedGenre.name}
-            </h2>
-
-            {isLoadingGenreSongs ? (
-              <div className="space-y-3">
-                {[...Array(8)].map((_, i) => (
-                  <SkeletonRow key={i} />
                 ))}
               </div>
-            ) : genreSongs.length === 0 ? (
-              <div className="text-center py-16 bg-[#141414] rounded-2xl border border-white/5">
-                <Music2 size={44} className="mx-auto text-neutral-500 mb-3" />
-                <h3 className="text-lg font-bold text-white mb-1">
-                  Chưa có bài hát nào thuộc thể loại này
-                </h3>
-                <p className="text-spotify-sub text-sm">
-                  Hãy đón chờ những giai điệu mới được các nghệ sĩ đăng tải nhé!
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {genreSongs.map((song, index) => (
-                  <SongRow
-                    key={song.id}
-                    index={index + 1}
-                    song={song}
-                    isPlaying={isPlaying && currentSong?.id === song.id}
-                    onPlayClick={() =>
-                      playSongWithContext(song, genreSongs, index)
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* =========================================================================
-            TRƯỜNG HỢP 3: MÀN HÌNH CHÍNH DUYỆT TÌM - HIỂN THỊ TOÀN BỘ THỂ LOẠI DẠNG THẺ
-           ========================================================================= */
-        <div className="space-y-8 animate-in fade-in duration-300">
-          {/* Header phần Duyệt tìm */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/5 pb-6">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#fa2d48]/10 text-[#fa2d48] border border-[#fa2d48]/20 text-xs font-bold uppercase tracking-wider mb-2">
-                <Compass size={14} />
-                Khám phá âm nhạc
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                Duyệt tìm tất cả
-              </h1>
-              <p className="text-spotify-sub text-sm sm:text-base mt-1">
-                Khám phá thế giới âm nhạc thông qua các thể loại đặc sắc được tuyển chọn
-              </p>
-            </div>
-
-            {/* Thống kê số lượng thể loại */}
-            {!isLoadingGenres && genres.length > 0 && (
-              <span className="text-xs font-medium text-neutral-400 bg-[#1c1c1c] px-3.5 py-1.5 rounded-full border border-neutral-800 self-start sm:self-auto">
-                <strong className="text-white">{genres.length}</strong> thể loại sẵn có
-              </span>
-            )}
-          </div>
-
-          {/* Lỗi tải API thể loại */}
-          {isErrorGenres && (
-            <div className="flex items-center justify-between p-4 rounded-xl bg-red-950/40 border border-red-800/60 text-red-200">
-              <div className="flex items-center gap-3">
-                <AlertCircle size={20} className="text-red-400 flex-shrink-0" />
-                <p className="text-sm">
-                  Không thể tải danh sách thể loại nhạc từ máy chủ. Vui lòng thử lại.
-                </p>
-              </div>
-              <button
-                onClick={() => refetchGenres()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-800/40 hover:bg-red-800/60 text-xs font-semibold text-white transition-colors cursor-pointer"
-              >
-                <RefreshCw size={14} />
-                Thử lại
-              </button>
-            </div>
+            </section>
           )}
 
-          {/* Loading Skeleton Grid */}
-          {isLoadingGenres ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-              {[...Array(12)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-40 sm:h-48 rounded-xl bg-[#1c1c1c] animate-pulse relative overflow-hidden"
-                >
-                  <div className="p-4 space-y-2">
-                    <div className="h-6 w-20 bg-neutral-700/60 rounded" />
-                    <div className="h-4 w-12 bg-neutral-800 rounded" />
-                  </div>
-                  <div className="absolute -bottom-3 -right-3 w-20 h-20 bg-neutral-800 rounded-md rotate-[25deg]" />
-                </div>
-              ))}
-            </div>
-          ) : genres.length === 0 ? (
-            /* Khi danh sách rỗng */
-            <div className="text-center py-24 bg-[#141414] rounded-2xl border border-white/5">
-              <Compass size={56} className="mx-auto text-neutral-600 mb-3" />
-              <h3 className="text-xl font-bold text-white mb-2">
-                Chưa có thể loại nào được khởi tạo
-              </h3>
-              <p className="text-spotify-sub text-sm max-w-md mx-auto">
-                Dữ liệu thể loại đang được hệ thống cập nhật. Vui lòng quay lại sau!
-              </p>
-            </div>
-          ) : (
-            /* =================================================================
-                LƯỚI THẺ THỂ LOẠI (GENRE CARDS GRID) - CHUẨN SPOTIFY RED THEME
-               ================================================================= */
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-              {genres.map((genre) => {
-                const style = getGenreStyle(genre.name);
-                const Icon = style.icon;
-
-                return (
-                  <div
-                    key={genre.id}
-                    onClick={() => handleSelectGenre(genre)}
-                    className={`group relative overflow-hidden rounded-xl p-4 sm:p-5 h-40 sm:h-48 cursor-pointer select-none transition-all duration-300 hover:scale-[1.04] shadow-lg hover:shadow-2xl bg-gradient-to-br ${style.bgClass} flex flex-col justify-between`}
-                    style={{
-                      boxShadow: `0 8px 24px -6px ${style.accentColor}33`,
-                    }}
-                  >
-                    {/* Hiệu ứng viền sáng nhẹ khi hover */}
-                    <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300 pointer-events-none" />
-
-                    {/* Tiêu đề thể loại & Icon */}
-                    <div className="relative z-10">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-white/70">
-                          Thể loại
-                        </span>
-                        <Icon size={16} className="text-white/80" />
-                      </div>
-                      <h3 className="text-lg sm:text-2xl font-black text-white tracking-tight leading-snug drop-shadow-md break-words pr-2 line-clamp-2">
-                        {genre.name}
-                      </h3>
-                    </div>
-
-                    {/* Badge phụ tinh tế */}
-                    <div className="relative z-10">
-                      <span className="text-[11px] font-medium text-white/80 backdrop-blur-sm bg-black/25 px-2 py-0.5 rounded-full inline-block truncate max-w-[85%]">
-                        {style.badge}
-                      </span>
-                    </div>
-
-                    {/* Artwork / Thumbnail xoay nghiêng 25 độ ở góc dưới bên phải */}
-                    <div className="absolute -bottom-2 -right-3 w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-md overflow-hidden shadow-[0_8px_20px_rgba(0,0,0,0.55)] transform rotate-[25deg] group-hover:rotate-[28deg] group-hover:scale-105 transition-all duration-300 pointer-events-none">
-                      {genre.coverImage ? (
-                        <img
-                          src={genre.coverImage}
-                          alt={genre.name}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                            if (e.target.nextSibling) {
-                              e.target.nextSibling.style.display = "flex";
-                            }
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className={`w-full h-full bg-black/40 flex items-center justify-center ${
-                          genre.coverImage ? "hidden" : "flex"
-                        }`}
-                      >
-                        <Icon size={36} className="text-white/80" />
-                      </div>
-                    </div>
-
-                    {/* Nút Play tương tác nhanh khi hover */}
-                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
-                      <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95">
-                        <Play size={18} fill="currentColor" className="ml-0.5" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
     </div>
   );
 };
 
-export default SearchPage;
+// ─── TopResult Card Component ────────────────────────────────────────────────
+const TopResultCard = ({ topResult, loadingSongId, onPlay, onNavigate, isPlaying, currentSong }) => {
+  if (!topResult?.item) return null;
+
+  const { type, item } = topResult;
+
+  const isArtist = type === "ARTIST";
+  const isSong = type === "SONG";
+  const isAlbum = type === "ALBUM";
+
+  const name = isArtist ? item.stageName : item.title;
+  const image = isArtist ? item.avatarUrl : item.coverImage;
+  const subtitle = isArtist ? "Nghệ sĩ" : isSong ? `Bài hát • ${item.ownerName || ""}` : `Album • ${item.ownerName || ""}`;
+
+  const handleCardClick = () => {
+    if (isArtist) onNavigate(`/artist/${item.id}`);
+    else if (isAlbum) onNavigate(`/album/${item.id}`);
+    else onPlay(item, []);
+  };
+
+  const isCurrentPlaying = isSong && currentSong?.id === item.id && isPlaying;
+  const isLoading = loadingSongId === item.id;
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className="relative bg-[#181818] hover:bg-[#282828] transition-colors rounded-xl p-5 cursor-pointer group h-full min-h-[200px] flex flex-col justify-between shadow-lg"
+    >
+      {/* Ảnh */}
+      <div className={`w-24 h-24 shadow-2xl flex-shrink-0 mb-4 ${isArtist ? "rounded-full" : "rounded-lg"} overflow-hidden`}>
+        <CoverImage
+          src={image}
+          alt={name}
+          isArtist={isArtist}
+          className="w-full h-full object-cover"
+        />
+      </div>
+
+      {/* Thông tin */}
+      <div>
+        <h3 className="text-2xl font-black text-white truncate leading-tight">{name}</h3>
+        <p className="text-sm text-spotify-sub mt-1">{subtitle}</p>
+      </div>
+
+      {/* Nút Play nổi */}
+      <Button
+        variant="primary"
+        size="lg"
+        iconOnly
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isSong) onPlay(item, []);
+          else handleCardClick();
+        }}
+        className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 shadow-[0_8px_20px_rgba(250,45,72,0.5)]"
+      >
+        {isLoading ? (
+          <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : isCurrentPlaying ? (
+          <Pause size={28} fill="white" className="text-white" />
+        ) : (
+          <Play size={28} fill="white" className="text-white ml-1" />
+        )}
+      </Button>
+    </div>
+  );
+};

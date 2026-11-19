@@ -19,7 +19,7 @@ export const getPublicGenres = async () => {
 
 /**
  * Lấy danh sách album công khai
- * @param {Object} params - { keyword, page, size, sort }
+ * @param {Object} params - { page, size }
  */
 export const getPublicAlbums = async (params = {}) => {
   const response = await api.get('/catalog/public/albums', { params });
@@ -85,14 +85,14 @@ export const getAlbumById = async (id) => {
 };
 
 /**
- * Tìm kiếm tổng hợp (Unified Search) theo từ khóa
- * @param {string} keyword
- * @param {number} limit
+ * Tìm kiếm thống nhất (Unified Search) - Bài hát, Album, Nghệ sĩ
+ * @param {String} keyword - Từ khóa tìm kiếm (bắt buộc)
+ * @param {Number} limit - Số kết quả tối đa mỗi danh mục (1-20, mặc định: 5)
+ * @returns {Promise} UnifiedSearchResponse { topResult, songs, albums, artists }
  */
-export const searchCatalogApi = async (keyword, limit = 5) => {
+export const searchCatalogApi = async (keyword, limit = 8) => {
   const response = await api.get('/catalog/public/search', {
-    params: { keyword, limit },
+    params: { keyword: keyword.trim(), limit },
   });
   return response.data;
 };
-

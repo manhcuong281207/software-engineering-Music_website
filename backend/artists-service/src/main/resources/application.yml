@@ -1,33 +1,35 @@
 server:
-    port: 8083
+    port: ${SERVER_PORT}
 spring:
+    config:
+        import: optional:file:.env[.properties]
     application:
-        name: artists-service
+        name: ${SPRING_APPLICATION_NAME}
     kafka:
-        bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+        bootstrap-servers: ${KAFKA_SERVERS}
     datasource:
-        password: ${DB_PASSWORD:12123456}
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/mc_music_db?currentSchema=mc_music_artists_schema}
-        username: ${DB_USERNAME:postgres}
+        password: ${DB_PASSWORD}
+        url: ${DB_URL}
+        username: ${DB_USERNAME}
     jpa:
-        database: POSTGRESQL
-        database-platform: org.hibernate.dialect.PostgreSQLDialect
+        database: ${JPA_DATABASE}
+        database-platform: ${JPA_DATABASE_PLATFORM}
         hibernate:
-            ddl-auto: update
+            ddl-auto: ${JPA_DDL_AUTO}
         properties:
             hibernate:
-                format_sql: true
-        show-sql: true
+                format_sql: ${JPA_FORMAT_SQL}
+        show-sql: ${JPA_SHOW_SQL}
 jwt:
-    secret: ${JWT_SECRET:superSecretKeyForArtistsServiceThatIsAtLeast32CharsLong}
-    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}
-    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800000}
+    secret: ${JWT_SECRET}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION}
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION}
 
 internal:
     api:
-        secret: ${INTERNAL_API_SECRET:SuperSecretKeyForInternalMicroserviceCommunication_McMusic2026}
+        secret: ${INTERNAL_API_SECRET}
 
 cloudinary:
-    cloud-name: ${CLOUDINARY_CLOUD_NAME:nemhjypf}
-    api-key: ${CLOUDINARY_API_KEY:198795169447897}
-    api-secret: ${CLOUDINARY_API_SECRET:oiV5gNYyZg2XDOy6q066x6MQ9YI}
+    cloud-name: ${CLOUDINARY_CLOUD_NAME}
+    api-key: ${CLOUDINARY_API_KEY}
+    api-secret: ${CLOUDINARY_API_SECRET}

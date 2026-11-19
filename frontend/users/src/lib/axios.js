@@ -1,25 +1,40 @@
 import axios from "axios";
 import { useAuthStore } from "../store/useAuthStore";
 
-// Base URL cho API: dùng proxy Vite (/api) hoặc cấu hình qua env
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+// Đảm bảo lấy biến môi trường theo chuẩn của Vite (có tiền tố VITE_)
+// Sử dụng proxy của Vite để tránh lỗi CORS
+const API_BASE_URL = "/api";
 
 const api = axios.create({
     baseURL: API_BASE_URL,
     headers: {
         "Content-Type": "application/json"
     },
-    // Timeout cho request để tránh treo giao diện (15s)
-    timeout: 15000,
+    // Timeout cho request để tránh treo giao diện (10s)
+    timeout: 10000,
 });
 
-// Interceptor cho Request: Gắn Bearer Token nếu đã đăng nhập
+// Interceptor cho Request: Xử lý trước khi gửi API
 api.interceptors.request.use(
     (config) => {
+        // Lấy token từ Zustand một cách an toàn (tránh lỗi circular dependency nếu import thẳng store vào top level module đang được store đó import lại, 
+        // nhưng ở đây axios.js không phụ thuộc vào thứ gì khác nên an toàn).
         const token = useAuthStore.getState().accessToken;
 
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
+        }
+
+        // Tự động bỏ Content-Type mặc định ("application/json") nếu request gửi FormData
+        // để Axios và trình duyệt tự động thiết lập "multipart/form-data; boundary=..." chuẩn xác
+        if (config.data instanceof FormData && config.headers) {
+            if (typeof config.headers.delete === "function") {
+                config.headers.delete("Content-Type");
+                config.headers.delete("content-type");
+            } else {
+                delete config.headers["Content-Type"];
+                delete config.headers["content-type"];
+            }
         }
 
         return config;
@@ -43,14 +58,16 @@ const processQueue = (error, token = null) => {
     failedQueue = [];
 };
 
-// Interceptor cho Response: Xử lý kết quả trả về & Tự động Refresh Token khi 401
+// Interceptor cho Response: Xử lý kết quả trả về từ Backend
 api.interceptors.response.use(
     (response) => {
+        // Trả về thẳng response để sử dụng
         return response;
     },
     async (error) => {
         const originalRequest = error.config;
 
+        // Xử lý các lỗi HTTP chung
         if (error.response) {
             const status = error.response.status;
 
@@ -85,7 +102,7 @@ api.interceptors.response.use(
                 isRefreshing = true;
 
                 try {
-                    // Gọi API refresh token (dùng axios trực tiếp để tránh vòng lặp interceptor)
+                    // Gọi API refresh token (sử dụng axios trực tiếp để tránh qua interceptor lặp)
                     const res = await axios.post(`${API_BASE_URL}/user/auth/refresh`, {
                         refreshToken,
                     });
@@ -100,7 +117,7 @@ api.interceptors.response.use(
                         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                         return api(originalRequest);
                     } else {
-                        throw new Error("Không nhận được token mới từ hệ thống");
+                        throw new Error("Không nhận được access token mới từ server");
                     }
                 } catch (refreshErr) {
                     processQueue(refreshErr, null);
@@ -110,12 +127,12 @@ api.interceptors.response.use(
                     isRefreshing = false;
                 }
             } else if (status === 403) {
-                console.warn("Truy cập bị từ chối: Không đủ quyền hạn.");
+                console.warn("Forbidden! You don't have permission.");
             } else if (status >= 500) {
-                console.error("Máy chủ gặp lỗi, vui lòng thử lại sau.");
+                console.error("Server error. Please try again later.");
             }
         } else if (error.request) {
-            console.error("Lỗi kết nối mạng: Không nhận được phản hồi từ máy chủ.");
+            console.error("Network error. No response received from server.");
         }
 
         return Promise.reject(error);
