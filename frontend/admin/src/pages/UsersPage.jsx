@@ -2,440 +2,396 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
+  Search,
+  RefreshCw,
   Lock,
   Unlock,
-  Search,
-  Eye,
-  ShieldCheck,
-  Calendar,
-  Mail,
-  Fingerprint,
-  AlertCircle,
+  CheckCircle2,
+  Filter,
+  ShieldAlert,
 } from "lucide-react";
-import { getUsersApi, toggleUserStatusApi, getUserDetailApi } from "../api/users";
-import { StatusBadge } from "../components/ui/StatusBadge";
-import { Pagination } from "../components/ui/Pagination";
-import { SkeletonRow } from "../components/ui/Skeleton";
+import { toast } from "sonner";
+
+import { getUsersApi, updateUserStatusApi } from "../api/users";
 import { Button } from "../components/ui/Button";
+import { StatusBadge } from "../components/ui/StatusBadge";
 import { Modal } from "../components/ui/Modal";
-import { formatDate } from "../utils/formatters";
-import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
-import { useAuthStore } from "../store/useAuthStore";
+import { SkeletonRow } from "../components/ui/Skeleton";
+import { formatDateTime } from "../utils/formatters";
 
 export const UsersPage = () => {
   const queryClient = useQueryClient();
-  const currentAdmin = useAuthStore((state) => state.admin);
 
   const [page, setPage] = useState(0);
-  const [searchKeyword, setSearchKeyword] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [pageSize] = useState(15);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("ALL"); // "ALL" | "ACTIVE" | "LOCKED"
 
-  // Modal Chi tiết tài khoản
-  const [detailUser, setDetailUser] = useState(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  // User được chọn để xác nhận Khóa / Mở khóa
+  const [targetUser, setTargetUser] = useState(null);
 
-  // 1. Fetch Users List
-  const { data: usersRes, isLoading, isError } = useQuery({
-    queryKey: ["adminUsers", page],
-    queryFn: () => getUsersApi({ page, size: 10, sort: "createdAt,desc" }),
+  // ── TRUY VẤN DANH SÁCH USER TỪ ADMIN SERVICE ──
+  const {
+    data: usersData,
+    isLoading,
+    refetch,
+  } = useQuery({
+    queryKey: ["adminUsersList", page, pageSize],
+    queryFn: () => getUsersApi({ page, size: pageSize, sort: "createdAt,desc" }),
   });
 
-  const usersList = usersRes?.data?.content || [];
-  const totalPages = usersRes?.data?.totalPages || 0;
-  const totalElements = usersRes?.data?.totalElements || 0;
+  const usersList = usersData?.data?.content || [];
+  const totalElements = usersData?.data?.totalElements || 0;
+  const totalPages = usersData?.data?.totalPages || 1;
 
-  // Lọc cục bộ theo từ khóa
-  const filteredUsers = usersList.filter(
-    (u) =>
-      u.fullName?.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      u.id?.toLowerCase().includes(searchKeyword.toLowerCase())
-  );
+  // Lọc danh sách theo từ khóa tìm kiếm và trạng thái
+  const filteredUsers = usersList.filter((user) => {
+    const q = searchTerm.toLowerCase().trim();
+    const nameMatch = user.fullName?.toLowerCase().includes(q);
+    const emailMatch = user.email?.toLowerCase().includes(q);
+    const idMatch = user.id?.toLowerCase().includes(q);
+    const searchMatches = !q || nameMatch || emailMatch || idMatch;
 
-  // 2. Mutation: Khóa / Mở khóa tài khoản
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, isActive }) => toggleUserStatusApi(id, isActive),
+    if (filterStatus === "ACTIVE") {
+      return searchMatches && user.isActive;
+    }
+    if (filterStatus === "LOCKED") {
+      return searchMatches && !user.isActive;
+    }
+    return searchMatches;
+  });
+
+  // ── MUTATION ĐỔI TRẠNG THÁI KHÓA / MỞ KHÓA ──
+  const statusMutation = useMutation({
+    mutationFn: ({ id, isActive }) => updateUserStatusApi(id, isActive),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
-      queryClient.invalidateQueries({ queryKey: ["adminUsersCount"] });
-      showSuccessToast(
-        variables.isActive
-          ? "Đã mở khóa tài khoản người dùng thành công"
-          : "Đã khóa tài khoản người dùng thành công"
+      const isLocking = !variables.isActive;
+      toast.success(
+        isLocking ? "Đã khóa tài khoản người dùng!" : "Đã mở khóa tài khoản thành công!",
+        {
+          description: `Tài khoản ${targetUser?.email} hiện ${
+            isLocking ? "đã bị vô hiệu hóa đăng nhập." : "đã có thể đăng nhập bình thường."
+          }`,
+        }
       );
-      setIsConfirmModalOpen(false);
-
-      // Nếu đang mở modal chi tiết của chính user này thì cập nhật trạng thái hiển thị
-      if (detailUser && detailUser.id === variables.id) {
-        setDetailUser((prev) => ({ ...prev, isActive: variables.isActive }));
-      }
-      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ["adminUsersList"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardUsersCount"] });
+      setTargetUser(null);
     },
     onError: (err) => {
-      showErrorToast(
-        err.response?.data?.message || "Không thể cập nhật trạng thái người dùng"
-      );
+      console.error("Lỗi khi cập nhật trạng thái người dùng:", err);
+      const msg = err.response?.data?.message || "Không thể cập nhật trạng thái người dùng. Vui lòng thử lại.";
+      toast.error("Thao tác thất bại", { description: msg });
     },
   });
 
-  const handleOpenConfirm = (user, e) => {
-    if (e) e.stopPropagation();
-    setSelectedUser(user);
-    setIsConfirmModalOpen(true);
-  };
-
-  const handleExecuteToggle = () => {
-    if (!selectedUser) return;
-    const nextStatus = !selectedUser.isActive;
-    toggleMutation.mutate({ id: selectedUser.id, isActive: nextStatus });
-  };
-
-  // Mở modal xem thông tin chi tiết
-  const handleOpenDetail = async (user) => {
-    setDetailUser(user);
-    setIsDetailModalOpen(true);
-    try {
-      const res = await getUserDetailApi(user.id);
-      if (res?.data) {
-        setDetailUser(res.data);
-      }
-    } catch {
-      // Giữ dữ liệu hiện tại từ bảng nếu API chi tiết gặp lỗi nhẹ
-    }
-  };
-
-  // Kiểm tra an toàn: Admin có phải đang thao tác trên tài khoản của chính mình không
-  const isSelf = (user) => {
-    if (!user || !currentAdmin) return false;
-    return (
-      (currentAdmin.id && currentAdmin.id === user.id) ||
-      (currentAdmin.email && currentAdmin.email === user.email)
-    );
+  const handleConfirmToggleStatus = () => {
+    if (!targetUser) return;
+    const newStatus = !targetUser.isActive;
+    statusMutation.mutate({ id: targetUser.id, isActive: newStatus });
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* ── 1. HEADER TRANG QUẢN LÝ NGƯỜI DÙNG ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-2.5">
-            <Users size={26} className="text-[#fa2d48]" /> Quản lý Người dùng
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+            <Users className="text-sky-400" size={26} />
+            Quản Lý Người Dùng
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-400 font-bold">
+              {totalElements} thính giả
+            </span>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Tổng cộng {totalElements} tài khoản người nghe trong hệ sinh thái MC Music
+            Danh sách toàn bộ tài khoản thính giả trong hệ sinh thái MC Music. Hỗ trợ tra cứu và khóa/mở khóa tài khoản khi có vi phạm.
           </p>
         </div>
 
-        {/* Search bar */}
-        <div className="relative w-full sm:w-72">
-          <Search
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500"
-          />
-          <input
-            type="text"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            placeholder="Tìm theo tên, email, ID..."
-            className="w-full pl-10 pr-4 py-2 bg-[#181818] border border-neutral-800 rounded-full text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#fa2d48] transition-colors"
-          />
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="dark"
+            size="sm"
+            onClick={() => refetch()}
+            tooltip="Làm mới danh sách"
+            className="text-xs"
+          >
+            <RefreshCw size={14} />
+            <span>Làm mới</span>
+          </Button>
         </div>
       </div>
 
-      {/* ── TABLE CARD ── */}
-      <div className="bg-[#181818] border border-neutral-800/80 rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-neutral-800/80 bg-neutral-900/60 text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-                <th className="py-4 px-6">Người dùng</th>
-                <th className="py-4 px-6">Email</th>
-                <th className="py-4 px-6">Trạng thái</th>
-                <th className="py-4 px-6">Ngày tạo</th>
-                <th className="py-4 px-6 text-right">Hành động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-800/60 text-xs">
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <SkeletonRow key={i} cols={5} />
-                ))
-              ) : isError ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-xs text-rose-400">
-                    <div className="flex flex-col items-center gap-2">
-                      <AlertCircle size={22} />
-                      <span>Không thể tải danh sách người dùng từ hệ thống</span>
-                    </div>
-                  </td>
+      {/* ── 2. THANH TÌM KIẾM & BỘ LỌC ── */}
+      <div className="p-4 rounded-2xl bg-[#181818] border border-white/[0.04] flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Ô Tìm kiếm */}
+        <div className="relative flex-1 max-w-md">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <input
+            type="text"
+            placeholder="Tìm theo họ tên, email hoặc User ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-[#202020] text-xs text-white rounded-xl pl-10 pr-4 py-2.5 outline-none border border-neutral-700/60 focus:border-white transition-colors"
+          />
+        </div>
+
+        {/* Bộ lọc Trạng thái */}
+        <div className="flex items-center gap-2">
+          <Filter size={14} className="text-neutral-500 hidden sm:block" />
+          <span className="text-xs text-neutral-400 font-semibold hidden sm:block">Trạng thái:</span>
+          <div className="flex items-center gap-1 bg-[#202020] p-1 rounded-xl border border-white/[0.04] text-xs">
+            <button
+              onClick={() => setFilterStatus("ALL")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterStatus === "ALL"
+                  ? "bg-sky-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Tất cả ({usersList.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("ACTIVE")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterStatus === "ACTIVE"
+                  ? "bg-emerald-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Đang hoạt động
+            </button>
+            <button
+              onClick={() => setFilterStatus("LOCKED")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterStatus === "LOCKED"
+                  ? "bg-rose-500 text-white shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Đã khóa
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. BẢNG DANH SÁCH NGƯỜI DÙNG TOÀN MÀN HÌNH ── */}
+      <div className="bg-[#181818] border border-white/[0.06] rounded-2xl overflow-hidden shadow-xl">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="py-20 text-center text-neutral-500">
+            <div className="w-14 h-14 rounded-full bg-sky-500/10 text-sky-400 mx-auto flex items-center justify-center mb-3">
+              <Users size={28} />
+            </div>
+            <h3 className="text-base font-bold text-white">Không tìm thấy người dùng!</h3>
+            <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
+              Không có tài khoản người dùng nào khớp với bộ lọc hoặc từ khóa tìm kiếm.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.06] bg-[#1d1d1d] text-neutral-400 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="py-3.5 pl-4 w-12 text-center">#</th>
+                  <th className="py-3.5 pl-2">Người dùng</th>
+                  <th className="py-3.5">Email</th>
+                  <th className="py-3.5">Vai trò</th>
+                  <th className="py-3.5">Ngày đăng ký</th>
+                  <th className="py-3.5">Trạng thái</th>
+                  <th className="py-3.5 text-right pr-4">Hành động</th>
                 </tr>
-              ) : filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => {
-                  const selfUser = isSelf(user);
+              </thead>
+              <tbody className="divide-y divide-white/[0.02]">
+                {filteredUsers.map((user, index) => {
+                  const itemIndex = page * pageSize + index + 1;
+                  const isActive = Boolean(user.isActive);
+
                   return (
-                    <tr
-                      key={user.id}
-                      onClick={() => handleOpenDetail(user)}
-                      className="hover:bg-neutral-800/30 transition-colors cursor-pointer"
-                    >
-                      {/* User info */}
-                      <td className="py-3.5 px-6">
+                    <tr key={user.id} className="hover:bg-white/[0.03] transition-colors">
+                      {/* Cột 1: STT */}
+                      <td className="py-3.5 pl-4 text-center font-mono text-neutral-500">
+                        {itemIndex}
+                      </td>
+
+                      {/* Cột 2: Thông tin Người dùng */}
+                      <td className="py-3.5 pl-2">
                         <div className="flex items-center gap-3">
-                          {user.avatarUrl ? (
-                            <img
-                              src={user.avatarUrl}
-                              alt={user.fullName}
-                              className="w-9 h-9 rounded-full object-cover border border-neutral-700 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-full bg-neutral-800 text-neutral-300 font-bold flex items-center justify-center text-xs shrink-0">
-                              {user.fullName ? user.fullName.charAt(0).toUpperCase() : "U"}
-                            </div>
-                          )}
+                          <div className="w-9 h-9 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-400 font-bold text-xs flex items-center justify-center flex-shrink-0">
+                            {user.fullName ? user.fullName.charAt(0).toUpperCase() : "U"}
+                          </div>
                           <div className="min-w-0">
-                            <div className="font-bold text-white text-sm truncate flex items-center gap-1.5">
-                              {user.fullName || "Chưa cập nhật tên"}
-                              {selfUser && (
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
-                                  Bạn
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-neutral-500 font-mono truncate">
-                              {user.id}
-                            </div>
+                            <p className="font-bold text-white truncate max-w-[200px]">
+                              {user.fullName || "Người dùng"}
+                            </p>
+                            <p className="text-[10px] text-neutral-500 font-mono truncate max-w-[150px]" title={user.id}>
+                              ID: {user.id}
+                            </p>
                           </div>
                         </div>
                       </td>
 
-                      {/* Email */}
-                      <td className="py-3.5 px-6 text-neutral-300">
+                      {/* Cột 3: Email */}
+                      <td className="py-3.5 text-neutral-300 font-medium">
                         {user.email}
                       </td>
 
-                      {/* Status */}
-                      <td className="py-3.5 px-6">
-                        <StatusBadge isActive={user.isActive ?? true} />
+                      {/* Cột 4: Vai trò */}
+                      <td className="py-3.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 uppercase tracking-wider">
+                          Thính giả
+                        </span>
                       </td>
 
-                      {/* Created Date */}
-                      <td className="py-3.5 px-6 text-neutral-400">
-                        {formatDate(user.createdAt)}
+                      {/* Cột 5: Ngày đăng ký */}
+                      <td className="py-3.5 text-neutral-400 text-[11px]">
+                        {formatDateTime(user.createdAt)}
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-3.5 px-6 text-right">
-                        <div
-                          className="flex items-center justify-end gap-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenDetail(user)}
-                            className="text-xs text-neutral-400 hover:text-white"
-                            title="Xem chi tiết"
-                          >
-                            <Eye size={14} /> Chi tiết
-                          </Button>
+                      {/* Cột 6: Trạng thái */}
+                      <td className="py-3.5">
+                        <StatusBadge status={isActive ? "ACTIVE" : "LOCKED"} size="sm" />
+                      </td>
 
+                      {/* Cột 7: Nút Khóa / Mở khóa */}
+                      <td className="py-3.5 text-right pr-4">
+                        {isActive ? (
                           <Button
-                            variant={user.isActive ? "danger" : "secondary"}
+                            variant="danger"
                             size="sm"
-                            onClick={(e) => handleOpenConfirm(user, e)}
-                            disabled={selfUser}
-                            className="text-xs"
-                            title={selfUser ? "Không thể khóa tài khoản của chính mình" : undefined}
+                            onClick={() => setTargetUser(user)}
+                            className="text-xs px-3 py-1 h-7.5 gap-1.5"
                           >
-                            {user.isActive ? (
-                              <>
-                                <Lock size={13} /> Khóa
-                              </>
-                            ) : (
-                              <>
-                                <Unlock size={13} /> Mở khóa
-                              </>
-                            )}
+                            <Lock size={12} />
+                            <span>Khóa</span>
                           </Button>
-                        </div>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setTargetUser(user)}
+                            className="text-xs px-3 py-1 h-7.5 gap-1.5 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500"
+                          >
+                            <Unlock size={12} />
+                            <span>Mở khóa</span>
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   );
-                })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="py-12 text-center text-xs text-neutral-500"
-                  >
-                    Không tìm thấy người dùng nào phù hợp với từ khóa
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {/* Pagination */}
-        <div className="p-4 border-t border-neutral-800/80">
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-        </div>
-      </div>
-
-      {/* ── MODAL 1: XEM CHI TIẾT TÀI KHOẢN (USER PROFILE MODAL) ── */}
-      <Modal
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        title="Thông tin chi tiết Người dùng"
-      >
-        {detailUser && (
-          <div className="space-y-6">
-            {/* Header info */}
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-neutral-900/80 border border-neutral-800">
-              {detailUser.avatarUrl ? (
-                <img
-                  src={detailUser.avatarUrl}
-                  alt={detailUser.fullName}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-[#fa2d48]/40"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-neutral-800 text-white text-xl font-bold flex items-center justify-center border-2 border-neutral-700">
-                  {detailUser.fullName ? detailUser.fullName.charAt(0).toUpperCase() : "U"}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-white truncate">
-                    {detailUser.fullName || "Chưa cập nhật tên"}
-                  </h3>
-                  {isSelf(detailUser) && (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
-                      Tài khoản của bạn
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-neutral-400 truncate flex items-center gap-1.5 mt-0.5">
-                  <Mail size={13} className="text-neutral-500" /> {detailUser.email}
-                </p>
-                <div className="mt-2">
-                  <StatusBadge isActive={detailUser.isActive ?? true} />
-                </div>
-              </div>
-            </div>
-
-            {/* Details Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <Fingerprint size={14} className="text-[#fa2d48]" /> ID Người dùng
-                </span>
-                <span className="text-white font-mono text-[11px] break-all select-all">
-                  {detailUser.id}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <ShieldCheck size={14} className="text-blue-400" /> Vai trò hệ thống
-                </span>
-                <span className="text-white font-semibold">
-                  Tài khoản Người nghe (User)
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80 sm:col-span-2">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <Calendar size={14} className="text-emerald-400" /> Thời gian đăng ký tài khoản
-                </span>
-                <span className="text-white font-semibold">
-                  {formatDate(detailUser.createdAt)}
-                </span>
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-4 border-t border-neutral-800">
-              <div>
-                {!isSelf(detailUser) && (
-                  <Button
-                    variant={detailUser.isActive ? "danger" : "secondary"}
-                    size="sm"
-                    onClick={() => {
-                      setIsDetailModalOpen(false);
-                      handleOpenConfirm(detailUser);
-                    }}
-                    className="text-xs"
-                  >
-                    {detailUser.isActive ? (
-                      <>
-                        <Lock size={13} /> Khóa tài khoản này
-                      </>
-                    ) : (
-                      <>
-                        <Unlock size={13} /> Mở khóa tài khoản
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-
+        {/* ── PHÂN TRANG DANH SÁCH ── */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-white/[0.04] bg-[#1b1b1b] flex items-center justify-between text-xs text-neutral-400">
+            <span>
+              Hiển thị {filteredUsers.length} / tổng số {totalElements} người dùng
+            </span>
+            <div className="flex items-center gap-2">
               <Button
-                variant="secondary"
+                variant="dark"
                 size="sm"
-                onClick={() => setIsDetailModalOpen(false)}
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="text-xs"
               >
-                Đóng
+                Trang trước
+              </Button>
+              <span className="font-mono text-white px-2">
+                {page + 1} / {totalPages}
+              </span>
+              <Button
+                variant="dark"
+                size="sm"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="text-xs"
+              >
+                Trang sau
               </Button>
             </div>
           </div>
         )}
-      </Modal>
+      </div>
 
-      {/* ── MODAL 2: XÁC NHẬN KHÓA / MỞ KHÓA ── */}
+      {/* ── MODAL XÁC NHẬN KHÓA / MỞ KHÓA TÀI KHOẢN NGƯỜI DÙNG ── */}
       <Modal
-        isOpen={isConfirmModalOpen}
-        onClose={() => setIsConfirmModalOpen(false)}
-        title={
-          selectedUser?.isActive
-            ? "Xác nhận khóa tài khoản"
-            : "Xác nhận mở khóa tài khoản"
-        }
+        isOpen={Boolean(targetUser)}
+        onClose={() => setTargetUser(null)}
+        title={targetUser?.isActive ? "Xác nhận Khóa Tài khoản Người dùng" : "Xác nhận Mở khóa Tài khoản"}
+        description="Thao tác này sẽ cập nhật trạng thái truy cập ứng dụng của người dùng."
+        maxWidth="max-w-md"
       >
-        <p className="text-sm text-neutral-300 mb-6">
-          Bạn có chắc chắn muốn{" "}
-          <span className="font-bold text-white">
-            {selectedUser?.isActive ? "khóa" : "mở khóa"}
-          </span>{" "}
-          tài khoản của người dùng{" "}
-          <span className="text-[#fa2d48] font-bold">
-            {selectedUser?.fullName || selectedUser?.email}
-          </span>
-          ?
-        </p>
+        {targetUser && (
+          <div className="space-y-4">
+            <div
+              className={`p-4 rounded-xl border flex items-start gap-3 ${
+                targetUser.isActive
+                  ? "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                  : "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+              }`}
+            >
+              {targetUser.isActive ? (
+                <ShieldAlert size={20} className="text-rose-400 flex-shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+              )}
+              <div className="text-xs leading-relaxed">
+                {targetUser.isActive ? (
+                  <p>
+                    Bạn có chắc chắn muốn <strong>khóa</strong> tài khoản của{" "}
+                    <span className="text-white font-bold">{targetUser.fullName}</span> (
+                    {targetUser.email})? Người dùng này sẽ <strong>bị đăng xuất và không thể đăng nhập</strong> vào hệ thống.
+                  </p>
+                ) : (
+                  <p>
+                    Bạn có chắc chắn muốn <strong>mở khóa</strong> cho tài khoản của{" "}
+                    <span className="text-white font-bold">{targetUser.fullName}</span> (
+                    {targetUser.email})? Người dùng sẽ được phép đăng nhập lại bình thường.
+                  </p>
+                )}
+              </div>
+            </div>
 
-        <div className="flex items-center justify-end gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsConfirmModalOpen(false)}
-            disabled={toggleMutation.isPending}
-          >
-            Hủy
-          </Button>
-          <Button
-            variant={selectedUser?.isActive ? "danger" : "primary"}
-            size="sm"
-            onClick={handleExecuteToggle}
-            isLoading={toggleMutation.isPending}
-          >
-            {selectedUser?.isActive ? "Khóa tài khoản" : "Mở khóa"}
-          </Button>
-        </div>
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/[0.04]">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTargetUser(null)}
+                disabled={statusMutation.isPending}
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                variant={targetUser.isActive ? "danger" : "primary"}
+                size="sm"
+                onClick={handleConfirmToggleStatus}
+                isLoading={statusMutation.isPending}
+                className="px-5"
+              >
+                {targetUser.isActive ? (
+                  <>
+                    <Lock size={14} /> Khóa tài khoản
+                  </>
+                ) : (
+                  <>
+                    <Unlock size={14} /> Mở khóa
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

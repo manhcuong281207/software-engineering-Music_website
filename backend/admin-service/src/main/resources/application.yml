@@ -1,34 +1,36 @@
 server:
-    port: 8084
+    port: ${SERVER_PORT}
 spring:
+    config:
+        import: optional:file:.env[.properties]
     application:
-        name: admin-service
+        name: ${SPRING_APPLICATION_NAME}
     datasource:
-        password: ${DB_PASSWORD:12123456}
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/mc_music_db?currentSchema=mc_music_admin_schema}
-        username: ${DB_USERNAME:postgres}
+        password: ${DB_PASSWORD}
+        url: ${DB_URL}
+        username: ${DB_USERNAME}
     jpa:
-        database: POSTGRESQL
-        database-platform: org.hibernate.dialect.PostgreSQLDialect
+        database: ${JPA_DATABASE}
+        database-platform: ${JPA_DATABASE_PLATFORM}
         hibernate:
-            ddl-auto: update
+            ddl-auto: ${JPA_DDL_AUTO}
         properties:
             hibernate:
-                format_sql: true
-        show-sql: true
+                format_sql: ${JPA_FORMAT_SQL}
+        show-sql: ${JPA_SHOW_SQL}
 jwt:
-    secret: ${JWT_SECRET:superSecretKeyForAdminServiceThatIsAtLeast32CharsLong}
-    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}
-    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800000}
+    secret: ${JWT_SECRET}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION}
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION}
 
 users:
     service:
-        url: ${USERS_SERVICE_URL:http://localhost:8082}
+        url: ${USERS_SERVICE_URL}
 
 artists:
     service:
-        url: ${ARTISTS_SERVICE_URL:http://localhost:8083}
+        url: ${ARTISTS_SERVICE_URL}
 
 internal:
     api:
-        secret: ${INTERNAL_API_SECRET:SuperSecretKeyForInternalMicroserviceCommunication_McMusic2026}
+        secret: ${INTERNAL_API_SECRET}

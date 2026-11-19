@@ -1,459 +1,400 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Mic2,
+  UserCheck,
+  Search,
+  RefreshCw,
   Lock,
   Unlock,
-  Search,
-  Users,
-  Eye,
-  Calendar,
-  Mail,
-  Fingerprint,
-  Radio,
-  AlertCircle,
+  CheckCircle2,
+  Filter,
+  ShieldAlert,
 } from "lucide-react";
-import { getArtistsApi, toggleArtistStatusApi, getArtistDetailApi } from "../api/artists";
-import { StatusBadge } from "../components/ui/StatusBadge";
-import { Pagination } from "../components/ui/Pagination";
-import { SkeletonRow } from "../components/ui/Skeleton";
+import { toast } from "sonner";
+
+import { getArtistsApi, updateArtistStatusApi } from "../api/artists";
 import { Button } from "../components/ui/Button";
+import { StatusBadge } from "../components/ui/StatusBadge";
+import { CoverImage } from "../components/ui/CoverImage";
 import { Modal } from "../components/ui/Modal";
-import { formatNumber, formatDate } from "../utils/formatters";
-import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
-import { useAuthStore } from "../store/useAuthStore";
+import { SkeletonRow } from "../components/ui/Skeleton";
+import { formatNumber, formatDateTime } from "../utils/formatters";
 
 export const ArtistsPage = () => {
   const queryClient = useQueryClient();
-  const currentAdmin = useAuthStore((state) => state.admin);
 
   const [page, setPage] = useState(0);
-  const [searchKeyword, setSearchKeyword] = useState("");
-  const [selectedArtist, setSelectedArtist] = useState(null);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [pageSize] = useState(15);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("ALL"); // "ALL" | "ACTIVE" | "LOCKED"
 
-  // Modal Chi tiết Nghệ sĩ
-  const [detailArtist, setDetailArtist] = useState(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  // Nghệ sĩ được chọn để xác nhận Khóa / Mở khóa
+  const [targetArtist, setTargetArtist] = useState(null);
 
-  // 1. Fetch Artists List
-  const { data: artistsRes, isLoading, isError } = useQuery({
-    queryKey: ["adminArtists", page],
-    queryFn: () => getArtistsApi({ page, size: 10, sort: "createdAt,desc" }),
+  // ── TRUY VẤN DANH SÁCH ARTIST TỪ ADMIN SERVICE ──
+  const {
+    data: artistsData,
+    isLoading,
+    refetch,
+  } = useQuery({
+    queryKey: ["adminArtistsList", page, pageSize],
+    queryFn: () => getArtistsApi({ page, size: pageSize, sort: "createdAt,desc" }),
   });
 
-  const artistsList = artistsRes?.data?.content || [];
-  const totalPages = artistsRes?.data?.totalPages || 0;
-  const totalElements = artistsRes?.data?.totalElements || 0;
+  const artistsList = artistsData?.data?.content || [];
+  const totalElements = artistsData?.data?.totalElements || 0;
+  const totalPages = artistsData?.data?.totalPages || 1;
 
-  // Lọc cục bộ theo từ khóa
-  const filteredArtists = artistsList.filter(
-    (a) =>
-      a.stageName?.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      a.email?.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      a.id?.toLowerCase().includes(searchKeyword.toLowerCase())
-  );
+  // Lọc danh sách theo từ khóa tìm kiếm và trạng thái
+  const filteredArtists = artistsList.filter((artist) => {
+    const q = searchTerm.toLowerCase().trim();
+    const nameMatch = artist.stageName?.toLowerCase().includes(q);
+    const emailMatch = artist.email?.toLowerCase().includes(q);
+    const idMatch = artist.id?.toLowerCase().includes(q);
+    const searchMatches = !q || nameMatch || emailMatch || idMatch;
 
-  // 2. Mutation: Khóa / Mở khóa Nghệ sĩ
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, isActive }) => toggleArtistStatusApi(id, isActive),
+    if (filterStatus === "ACTIVE") {
+      return searchMatches && artist.isActive;
+    }
+    if (filterStatus === "LOCKED") {
+      return searchMatches && !artist.isActive;
+    }
+    return searchMatches;
+  });
+
+  // ── MUTATION ĐỔI TRẠNG THÁI KHÓA / MỞ KHÓA NGHỆ SĨ ──
+  const statusMutation = useMutation({
+    mutationFn: ({ id, isActive }) => updateArtistStatusApi(id, isActive),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["adminArtists"] });
-      queryClient.invalidateQueries({ queryKey: ["adminArtistsCount"] });
-      showSuccessToast(
-        variables.isActive
-          ? "Đã mở khóa tài khoản nghệ sĩ thành công"
-          : "Đã khóa tài khoản nghệ sĩ thành công"
+      const isLocking = !variables.isActive;
+      toast.success(
+        isLocking ? "Đã khóa tài khoản nghệ sĩ!" : "Đã mở khóa tài khoản nghệ sĩ thành công!",
+        {
+          description: `Tài khoản ${targetArtist?.stageName} (${targetArtist?.email}) hiện ${
+            isLocking ? "đã bị khóa quyền truy cập Artist Studio." : "đã có thể truy cập Studio và phát hành nhạc bình thường."
+          }`,
+        }
       );
-      setIsConfirmModalOpen(false);
-
-      if (detailArtist && detailArtist.id === variables.id) {
-        setDetailArtist((prev) => ({ ...prev, isActive: variables.isActive }));
-      }
-      setSelectedArtist(null);
+      queryClient.invalidateQueries({ queryKey: ["adminArtistsList"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardArtistsCount"] });
+      setTargetArtist(null);
     },
     onError: (err) => {
-      showErrorToast(
-        err.response?.data?.message || "Không thể cập nhật trạng thái nghệ sĩ"
-      );
+      console.error("Lỗi khi cập nhật trạng thái nghệ sĩ:", err);
+      const msg = err.response?.data?.message || "Không thể cập nhật trạng thái nghệ sĩ. Vui lòng thử lại.";
+      toast.error("Thao tác thất bại", { description: msg });
     },
   });
 
-  const handleOpenConfirm = (artist, e) => {
-    if (e) e.stopPropagation();
-    setSelectedArtist(artist);
-    setIsConfirmModalOpen(true);
-  };
-
-  const handleExecuteToggle = () => {
-    if (!selectedArtist) return;
-    const nextStatus = !selectedArtist.isActive;
-    toggleMutation.mutate({ id: selectedArtist.id, isActive: nextStatus });
-  };
-
-  // Mở modal xem thông tin chi tiết nghệ sĩ
-  const handleOpenDetail = async (artist) => {
-    setDetailArtist(artist);
-    setIsDetailModalOpen(true);
-    try {
-      const res = await getArtistDetailApi(artist.id);
-      if (res?.data) {
-        setDetailArtist(res.data);
-      }
-    } catch {
-      // Giữ thông tin cơ bản hiện tại nếu API chi tiết trục trặc
-    }
-  };
-
-  // Kiểm tra an toàn: nếu tài khoản trùng với admin
-  const isSelf = (artist) => {
-    if (!artist || !currentAdmin) return false;
-    return (
-      (currentAdmin.id && currentAdmin.id === artist.id) ||
-      (currentAdmin.email && currentAdmin.email === artist.email)
-    );
+  const handleConfirmToggleStatus = () => {
+    if (!targetArtist) return;
+    const newStatus = !targetArtist.isActive;
+    statusMutation.mutate({ id: targetArtist.id, isActive: newStatus });
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* ── 1. HEADER TRANG QUẢN LÝ NGHỆ SĨ ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-2.5">
-            <Mic2 size={26} className="text-[#fa2d48]" /> Quản lý Nghệ sĩ
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+            <UserCheck className="text-emerald-400" size={26} />
+            Quản Lý Nghệ Sĩ
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
+              {totalElements} nghệ danh
+            </span>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Tổng cộng {totalElements} đối tác sáng tạo và người đăng tải âm nhạc trên hệ thống
+            Danh sách toàn bộ tài khoản đối tác sáng tạo âm nhạc trên nền tảng MC Music. Quản lý trạng thái và quyền phát hành tác phẩm.
           </p>
         </div>
 
-        {/* Search bar */}
-        <div className="relative w-full sm:w-72">
-          <Search
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500"
-          />
-          <input
-            type="text"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            placeholder="Tìm theo nghệ danh, email, ID..."
-            className="w-full pl-10 pr-4 py-2 bg-[#181818] border border-neutral-800 rounded-full text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#fa2d48] transition-colors"
-          />
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="dark"
+            size="sm"
+            onClick={() => refetch()}
+            tooltip="Làm mới danh sách"
+            className="text-xs"
+          >
+            <RefreshCw size={14} />
+            <span>Làm mới</span>
+          </Button>
         </div>
       </div>
 
-      {/* ── TABLE CARD ── */}
-      <div className="bg-[#181818] border border-neutral-800/80 rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-neutral-800/80 bg-neutral-900/60 text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-                <th className="py-4 px-6">Nghệ sĩ</th>
-                <th className="py-4 px-6">Email</th>
-                <th className="py-4 px-6">Người theo dõi</th>
-                <th className="py-4 px-6">Trạng thái</th>
-                <th className="py-4 px-6">Ngày tham gia</th>
-                <th className="py-4 px-6 text-right">Hành động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-800/60 text-xs">
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <SkeletonRow key={i} cols={6} />
-                ))
-              ) : isError ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-xs text-rose-400">
-                    <div className="flex flex-col items-center gap-2">
-                      <AlertCircle size={22} />
-                      <span>Không thể tải danh sách nghệ sĩ từ hệ thống</span>
-                    </div>
-                  </td>
+      {/* ── 2. THANH TÌM KIẾM & BỘ LỌC ── */}
+      <div className="p-4 rounded-2xl bg-[#181818] border border-white/[0.04] flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Ô Tìm kiếm */}
+        <div className="relative flex-1 max-w-md">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <input
+            type="text"
+            placeholder="Tìm theo nghệ danh, email hoặc Artist ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-[#202020] text-xs text-white rounded-xl pl-10 pr-4 py-2.5 outline-none border border-neutral-700/60 focus:border-white transition-colors"
+          />
+        </div>
+
+        {/* Bộ lọc Trạng thái */}
+        <div className="flex items-center gap-2">
+          <Filter size={14} className="text-neutral-500 hidden sm:block" />
+          <span className="text-xs text-neutral-400 font-semibold hidden sm:block">Trạng thái:</span>
+          <div className="flex items-center gap-1 bg-[#202020] p-1 rounded-xl border border-white/[0.04] text-xs">
+            <button
+              onClick={() => setFilterStatus("ALL")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterStatus === "ALL"
+                  ? "bg-emerald-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Tất cả ({artistsList.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("ACTIVE")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterStatus === "ACTIVE"
+                  ? "bg-emerald-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Đang hoạt động
+            </button>
+            <button
+              onClick={() => setFilterStatus("LOCKED")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterStatus === "LOCKED"
+                  ? "bg-rose-500 text-white shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Đã khóa Studio
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. BẢNG DANH SÁCH NGHỆ SĨ TOÀN MÀN HÌNH ── */}
+      <div className="bg-[#181818] border border-white/[0.06] rounded-2xl overflow-hidden shadow-xl">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        ) : filteredArtists.length === 0 ? (
+          <div className="py-20 text-center text-neutral-500">
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center mb-3">
+              <UserCheck size={28} />
+            </div>
+            <h3 className="text-base font-bold text-white">Không tìm thấy nghệ sĩ!</h3>
+            <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
+              Không có tài khoản nghệ sĩ nào khớp với bộ lọc hoặc từ khóa tìm kiếm.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.06] bg-[#1d1d1d] text-neutral-400 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="py-3.5 pl-4 w-12 text-center">#</th>
+                  <th className="py-3.5 pl-2">Nghệ danh & Hồ sơ</th>
+                  <th className="py-3.5">Email liên hệ</th>
+                  <th className="py-3.5">Người theo dõi</th>
+                  <th className="py-3.5">Ngày gia nhập Studio</th>
+                  <th className="py-3.5">Trạng thái Studio</th>
+                  <th className="py-3.5 text-right pr-4">Hành động</th>
                 </tr>
-              ) : filteredArtists.length > 0 ? (
-                filteredArtists.map((artist) => {
-                  const selfUser = isSelf(artist);
+              </thead>
+              <tbody className="divide-y divide-white/[0.02]">
+                {filteredArtists.map((artist, index) => {
+                  const itemIndex = page * pageSize + index + 1;
+                  const isActive = Boolean(artist.isActive);
+
                   return (
-                    <tr
-                      key={artist.id}
-                      onClick={() => handleOpenDetail(artist)}
-                      className="hover:bg-neutral-800/30 transition-colors cursor-pointer"
-                    >
-                      {/* Artist info */}
-                      <td className="py-3.5 px-6">
+                    <tr key={artist.id} className="hover:bg-white/[0.03] transition-colors">
+                      {/* Cột 1: STT */}
+                      <td className="py-3.5 pl-4 text-center font-mono text-neutral-500">
+                        {itemIndex}
+                      </td>
+
+                      {/* Cột 2: Nghệ danh & Hồ sơ */}
+                      <td className="py-3.5 pl-2">
                         <div className="flex items-center gap-3">
-                          {artist.avatarUrl ? (
-                            <img
-                              src={artist.avatarUrl}
-                              alt={artist.stageName}
-                              className="w-9 h-9 rounded-full object-cover border border-neutral-700 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-full bg-neutral-800 text-neutral-300 font-bold flex items-center justify-center text-xs shrink-0">
-                              {artist.stageName ? artist.stageName.charAt(0).toUpperCase() : "A"}
-                            </div>
-                          )}
+                          <CoverImage
+                            src={artist.avatarUrl}
+                            alt={artist.stageName}
+                            isArtist
+                            className="w-10 h-10 rounded-full"
+                            fallbackIconSize={18}
+                          />
                           <div className="min-w-0">
-                            <div className="font-bold text-white text-sm truncate flex items-center gap-1.5">
-                              {artist.stageName}
-                              {selfUser && (
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
-                                  Bạn
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-neutral-500 font-mono truncate">
-                              {artist.id}
-                            </div>
+                            <p className="font-bold text-white truncate max-w-[200px]">
+                              {artist.stageName || "Nghệ sĩ"}
+                            </p>
+                            <p className="text-[10px] text-neutral-500 font-mono truncate max-w-[150px]" title={artist.id}>
+                              ID: {artist.id}
+                            </p>
                           </div>
                         </div>
                       </td>
 
-                      {/* Email */}
-                      <td className="py-3.5 px-6 text-neutral-300">
+                      {/* Cột 3: Email */}
+                      <td className="py-3.5 text-neutral-300 font-medium">
                         {artist.email}
                       </td>
 
-                      {/* Followers */}
-                      <td className="py-3.5 px-6 text-neutral-300 font-medium">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Users size={13} className="text-neutral-500" />
-                          {formatNumber(artist.followerCount || 0)}
-                        </span>
+                      {/* Cột 4: Người theo dõi */}
+                      <td className="py-3.5 font-mono text-neutral-300">
+                        {formatNumber(artist.followerCount || 0)} fan
                       </td>
 
-                      {/* Status */}
-                      <td className="py-3.5 px-6">
-                        <StatusBadge isActive={artist.isActive ?? true} />
+                      {/* Cột 5: Ngày gia nhập */}
+                      <td className="py-3.5 text-neutral-400 text-[11px]">
+                        {formatDateTime(artist.createdAt)}
                       </td>
 
-                      {/* Created Date */}
-                      <td className="py-3.5 px-6 text-neutral-400">
-                        {formatDate(artist.createdAt)}
+                      {/* Cột 6: Trạng thái Studio */}
+                      <td className="py-3.5">
+                        <StatusBadge status={isActive ? "ACTIVE" : "LOCKED"} size="sm" />
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-3.5 px-6 text-right">
-                        <div
-                          className="flex items-center justify-end gap-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                      {/* Cột 7: Nút Khóa / Mở khóa Studio */}
+                      <td className="py-3.5 text-right pr-4">
+                        {isActive ? (
                           <Button
-                            variant="ghost"
+                            variant="danger"
                             size="sm"
-                            onClick={() => handleOpenDetail(artist)}
-                            className="text-xs text-neutral-400 hover:text-white"
-                            title="Xem chi tiết"
+                            onClick={() => setTargetArtist(artist)}
+                            className="text-xs px-3 py-1 h-7.5 gap-1.5"
                           >
-                            <Eye size={14} /> Chi tiết
+                            <Lock size={12} />
+                            <span>Khóa Studio</span>
                           </Button>
-
+                        ) : (
                           <Button
-                            variant={artist.isActive ? "danger" : "secondary"}
+                            variant="secondary"
                             size="sm"
-                            onClick={(e) => handleOpenConfirm(artist, e)}
-                            disabled={selfUser}
-                            className="text-xs"
-                            title={selfUser ? "Không thể khóa tài khoản của chính mình" : undefined}
+                            onClick={() => setTargetArtist(artist)}
+                            className="text-xs px-3 py-1 h-7.5 gap-1.5 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500"
                           >
-                            {artist.isActive ? (
-                              <>
-                                <Lock size={13} /> Khóa
-                              </>
-                            ) : (
-                              <>
-                                <Unlock size={13} /> Mở khóa
-                              </>
-                            )}
+                            <Unlock size={12} />
+                            <span>Mở khóa</span>
                           </Button>
-                        </div>
+                        )}
                       </td>
                     </tr>
                   );
-                })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="py-12 text-center text-xs text-neutral-500"
-                  >
-                    Không tìm thấy nghệ sĩ nào phù hợp với từ khóa
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {/* Pagination */}
-        <div className="p-4 border-t border-neutral-800/80">
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-        </div>
-      </div>
-
-      {/* ── MODAL 1: XEM CHI TIẾT NGHỆ SĨ (ARTIST PROFILE MODAL) ── */}
-      <Modal
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        title="Thông tin chi tiết Nghệ sĩ"
-      >
-        {detailArtist && (
-          <div className="space-y-6">
-            {/* Header info */}
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-neutral-900/80 border border-neutral-800">
-              {detailArtist.avatarUrl ? (
-                <img
-                  src={detailArtist.avatarUrl}
-                  alt={detailArtist.stageName}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-emerald-500/40"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-neutral-800 text-white text-xl font-bold flex items-center justify-center border-2 border-neutral-700">
-                  {detailArtist.stageName ? detailArtist.stageName.charAt(0).toUpperCase() : "A"}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-white truncate">
-                    {detailArtist.stageName}
-                  </h3>
-                  {isSelf(detailArtist) && (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
-                      Tài khoản của bạn
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-neutral-400 truncate flex items-center gap-1.5 mt-0.5">
-                  <Mail size={13} className="text-neutral-500" /> {detailArtist.email}
-                </p>
-                <div className="mt-2">
-                  <StatusBadge isActive={detailArtist.isActive ?? true} />
-                </div>
-              </div>
-            </div>
-
-            {/* Details Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <Fingerprint size={14} className="text-[#fa2d48]" /> ID Nghệ sĩ
-                </span>
-                <span className="text-white font-mono text-[11px] break-all select-all">
-                  {detailArtist.id}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <Users size={14} className="text-emerald-400" /> Người theo dõi
-                </span>
-                <span className="text-white font-bold text-sm">
-                  {formatNumber(detailArtist.followerCount || 0)} người
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <Radio size={14} className="text-indigo-400" /> Vai trò sáng tạo
-                </span>
-                <span className="text-white font-semibold">
-                  Đối tác Nghệ sĩ (Artist / Creator)
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-neutral-900/50 border border-neutral-800/80">
-                <span className="text-neutral-500 flex items-center gap-1.5 mb-1 font-medium">
-                  <Calendar size={14} className="text-amber-400" /> Ngày tham gia nền tảng
-                </span>
-                <span className="text-white font-semibold">
-                  {formatDate(detailArtist.createdAt)}
-                </span>
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-4 border-t border-neutral-800">
-              <div>
-                {!isSelf(detailArtist) && (
-                  <Button
-                    variant={detailArtist.isActive ? "danger" : "secondary"}
-                    size="sm"
-                    onClick={() => {
-                      setIsDetailModalOpen(false);
-                      handleOpenConfirm(detailArtist);
-                    }}
-                    className="text-xs"
-                  >
-                    {detailArtist.isActive ? (
-                      <>
-                        <Lock size={13} /> Khóa nghệ sĩ này
-                      </>
-                    ) : (
-                      <>
-                        <Unlock size={13} /> Mở khóa nghệ sĩ
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-
+        {/* ── PHÂN TRANG DANH SÁCH ── */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-white/[0.04] bg-[#1b1b1b] flex items-center justify-between text-xs text-neutral-400">
+            <span>
+              Hiển thị {filteredArtists.length} / tổng số {totalElements} nghệ sĩ
+            </span>
+            <div className="flex items-center gap-2">
               <Button
-                variant="secondary"
+                variant="dark"
                 size="sm"
-                onClick={() => setIsDetailModalOpen(false)}
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="text-xs"
               >
-                Đóng
+                Trang trước
+              </Button>
+              <span className="font-mono text-white px-2">
+                {page + 1} / {totalPages}
+              </span>
+              <Button
+                variant="dark"
+                size="sm"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="text-xs"
+              >
+                Trang sau
               </Button>
             </div>
           </div>
         )}
-      </Modal>
+      </div>
 
-      {/* ── MODAL 2: XÁC NHẬN KHÓA / MỞ KHÓA ── */}
+      {/* ── MODAL XÁC NHẬN KHÓA / MỞ KHÓA TÀI KHOẢN NGHỆ SĨ ── */}
       <Modal
-        isOpen={isConfirmModalOpen}
-        onClose={() => setIsConfirmModalOpen(false)}
-        title={
-          selectedArtist?.isActive
-            ? "Xác nhận khóa nghệ sĩ"
-            : "Xác nhận mở khóa nghệ sĩ"
-        }
+        isOpen={Boolean(targetArtist)}
+        onClose={() => setTargetArtist(null)}
+        title={targetArtist?.isActive ? "Xác nhận Khóa Tài khoản Nghệ sĩ" : "Xác nhận Mở khóa Tài khoản Nghệ sĩ"}
+        description="Thao tác này sẽ cập nhật quyền truy cập Artist Studio và phát hành âm nhạc của nghệ sĩ."
+        maxWidth="max-w-md"
       >
-        <p className="text-sm text-neutral-300 mb-6">
-          Bạn có chắc chắn muốn{" "}
-          <span className="font-bold text-white">
-            {selectedArtist?.isActive ? "khóa" : "mở khóa"}
-          </span>{" "}
-          tài khoản của nghệ sĩ{" "}
-          <span className="text-[#fa2d48] font-bold">
-            {selectedArtist?.stageName}
-          </span>
-          ? Khi bị khóa, nghệ sĩ sẽ không thể đăng tải nhạc hoặc truy cập studio quản lý.
-        </p>
+        {targetArtist && (
+          <div className="space-y-4">
+            <div
+              className={`p-4 rounded-xl border flex items-start gap-3 ${
+                targetArtist.isActive
+                  ? "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                  : "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+              }`}
+            >
+              {targetArtist.isActive ? (
+                <ShieldAlert size={20} className="text-rose-400 flex-shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+              )}
+              <div className="text-xs leading-relaxed">
+                {targetArtist.isActive ? (
+                  <p>
+                    Bạn có chắc chắn muốn <strong>khóa quyền Studio</strong> của nghệ sĩ{" "}
+                    <span className="text-white font-bold">{targetArtist.stageName}</span> (
+                    {targetArtist.email})? Nghệ sĩ này sẽ <strong>không thể đăng nhập Artist Studio</strong> và không thể đăng tải thêm bài hát/album mới.
+                  </p>
+                ) : (
+                  <p>
+                    Bạn có chắc chắn muốn <strong>mở khóa quyền Studio</strong> cho nghệ sĩ{" "}
+                    <span className="text-white font-bold">{targetArtist.stageName}</span> (
+                    {targetArtist.email})? Nghệ sĩ sẽ được phép đăng nhập lại Artist Studio và tiếp tục phát hành âm nhạc.
+                  </p>
+                )}
+              </div>
+            </div>
 
-        <div className="flex items-center justify-end gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsConfirmModalOpen(false)}
-            disabled={toggleMutation.isPending}
-          >
-            Hủy
-          </Button>
-          <Button
-            variant={selectedArtist?.isActive ? "danger" : "primary"}
-            size="sm"
-            onClick={handleExecuteToggle}
-            isLoading={toggleMutation.isPending}
-          >
-            {selectedArtist?.isActive ? "Khóa nghệ sĩ" : "Mở khóa"}
-          </Button>
-        </div>
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/[0.04]">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTargetArtist(null)}
+                disabled={statusMutation.isPending}
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                variant={targetArtist.isActive ? "danger" : "primary"}
+                size="sm"
+                onClick={handleConfirmToggleStatus}
+                isLoading={statusMutation.isPending}
+                className="px-5"
+              >
+                {targetArtist.isActive ? (
+                  <>
+                    <Lock size={14} /> Khóa Studio
+                  </>
+                ) : (
+                  <>
+                    <Unlock size={14} /> Mở khóa Studio
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

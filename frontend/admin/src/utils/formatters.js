@@ -1,60 +1,67 @@
 /**
- * Định dạng số thành chuỗi dễ đọc (VD: 12500 -> 12,500)
+ * Định dạng số thành chuỗi có dấu phẩy ngăn cách hàng nghìn (VD: 1,234,567)
  */
 export const formatNumber = (num) => {
-  if (num === null || num === undefined) return "0";
+  if (num === null || num === undefined || isNaN(num)) return "0";
   return new Intl.NumberFormat("vi-VN").format(num);
 };
 
 /**
- * Định dạng thời gian ISO thành dd/mm/yyyy hh:mm
+ * Định dạng số giây thành chuỗi thời lượng mm:ss (VD: 215 -> "3:35")
+ */
+export const formatDuration = (seconds) => {
+  if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+};
+
+/**
+ * Định dạng ngày ISO thành dd/mm/yyyy
  */
 export const formatDate = (dateString) => {
-  if (!dateString) return "--";
+  if (!dateString) return "Chưa cập nhật";
   try {
-    const d = new Date(dateString);
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
     return new Intl.DateTimeFormat("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
       day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
+      month: "2-digit",
+      year: "numeric",
+    }).format(date);
   } catch {
     return dateString;
   }
 };
 
 /**
- * Định dạng số giây sang phút:giây (VD: 185s -> 03:05)
+ * Định dạng ngày giờ ISO thành dd/mm/yyyy HH:mm
  */
-export const formatDuration = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "00:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+export const formatDateTime = (dateString) => {
+  if (!dateString) return "Chưa cập nhật";
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return dateString;
+  }
 };
 
 /**
- * Định dạng khoảng thời gian tương đối (VD: 5 phút trước, 2 giờ trước)
+ * Định dạng dung lượng byte thành KB, MB, GB
  */
-export const formatRelativeTime = (dateString) => {
-  if (!dateString) return "";
-  try {
-    const d = new Date(dateString);
-    const now = new Date();
-    const diffSec = Math.floor((now - d) / 1000);
-    if (diffSec < 60) return "Vừa xong";
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} phút trước`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour} giờ trước`;
-    const diffDay = Math.floor(diffHour / 24);
-    if (diffDay < 30) return `${diffDay} ngày trước`;
-    const diffMonth = Math.floor(diffDay / 30);
-    return `${diffMonth} tháng trước`;
-  } catch {
-    return "";
-  }
+export const formatFileSize = (bytes) => {
+  if (!bytes || isNaN(bytes) || bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 

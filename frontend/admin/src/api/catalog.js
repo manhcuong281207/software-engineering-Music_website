@@ -1,117 +1,81 @@
 import api from "../lib/axios";
 
 /**
- * Lấy danh sách Bài hát đang chờ duyệt (PENDING)
- * @param {Object} params - { page, size }
- * @returns {Promise<Object>}
+ * Lấy danh sách bài hát đang chờ kiểm duyệt (status = PENDING)
+ * @param {Object} params - { page = 0, size = 10, sort = "createdAt,desc" }
  */
-export const getPendingSongsApi = async ({ page = 0, size = 10 } = {}) => {
+export const getPendingSongsApi = async (params = {}) => {
+  const { page = 0, size = 10, sort = "createdAt,desc" } = params;
   const response = await api.get("/catalog/admin/songs/pending", {
-    params: { page, size },
+    params: { page, size, sort },
   });
   return response.data;
 };
 
 /**
- * Cập nhật trạng thái duyệt / từ chối / gỡ bài hát
+ * Cập nhật trạng thái bài hát (Duyệt, Từ chối, Gỡ bỏ)
  * @param {string} songId - UUID của bài hát
- * @param {'APPROVED' | 'REJECTED' | 'TAKEDOWN'} status - Trạng thái mới
- * @param {string} reason - Lý do nếu từ chối hoặc gỡ bài
- * @returns {Promise<Object>}
+ * @param {Object} payload - { status: "APPROVED" | "REJECTED" | "TAKEDOWN", rejectionReason?: string }
  */
-export const updateSongStatusApi = async (songId, status, reason = "") => {
-  const response = await api.patch(`/catalog/admin/songs/${songId}/status`, {
-    status,
-    reason,
-  });
+export const updateSongStatusApi = async (songId, payload) => {
+  const response = await api.patch(`/catalog/admin/songs/${songId}/status`, payload);
   return response.data;
 };
 
 /**
- * Lấy danh sách Album đang chờ duyệt (PENDING)
- * @param {Object} params - { page, size }
- * @returns {Promise<Object>}
+ * Lấy danh sách Album đang chờ kiểm duyệt (status = PENDING)
+ * @param {Object} params - { page = 0, size = 10, sort = "createdAt,desc" }
  */
-export const getPendingAlbumsApi = async ({ page = 0, size = 10 } = {}) => {
+export const getPendingAlbumsApi = async (params = {}) => {
+  const { page = 0, size = 10, sort = "createdAt,desc" } = params;
   const response = await api.get("/catalog/admin/albums/pending", {
-    params: { page, size },
+    params: { page, size, sort },
   });
   return response.data;
 };
 
 /**
- * Cập nhật trạng thái duyệt / từ chối / gỡ Album
- * @param {string} albumId - UUID của album
- * @param {'APPROVED' | 'REJECTED' | 'TAKEDOWN'} status - Trạng thái mới
- * @param {string} reason - Lý do nếu từ chối hoặc gỡ album
- * @returns {Promise<Object>}
- */
-export const updateAlbumStatusApi = async (albumId, status, reason = "") => {
-  const response = await api.patch(`/catalog/admin/albums/${albumId}/status`, {
-    status,
-    reason,
-  });
-  return response.data;
-};
-
-/**
- * Lấy chi tiết bài hát cho Admin (kể cả PENDING, REJECTED, TAKEDOWN)
+ * Lấy lời bài hát (Lyrics) phục vụ thẩm định ca từ
+ * Ưu tiên gọi Admin endpoint để đọc được cả ca từ của bài hát PENDING
  * @param {string} songId - UUID của bài hát
- * @returns {Promise<Object>}
  */
-export const getAdminSongDetailApi = async (songId) => {
-  const response = await api.get(`/catalog/admin/songs/${songId}`);
-  return response.data;
+export const getSongLyricsApi = async (songId) => {
+  try {
+    const response = await api.get(`/catalog/admin/songs/${songId}/lyrics`);
+    return response.data;
+  } catch {
+    try {
+      const fallbackRes = await api.get(`/catalog/public/songs/${songId}/lyrics`);
+      return fallbackRes.data;
+    } catch {
+      return { data: null };
+    }
+  }
 };
 
 /**
- * Lấy lời bài hát cho Admin
- * @param {string} songId - UUID của bài hát
- * @returns {Promise<Object>}
+ * Lấy danh sách bài hát thuộc một Album
+ * Ưu tiên gọi Admin endpoint để tải được các track PENDING trong album đang duyệt
+ * @param {string} albumId - UUID album
+ * @param {Object} params - { page = 0, size = 50 }
  */
-export const getAdminSongLyricsApi = async (songId) => {
-  const response = await api.get(`/catalog/admin/songs/${songId}/lyrics`);
-  return response.data;
+export const getSongsByAlbumApi = async (albumId, params = { page: 0, size: 50 }) => {
+  try {
+    const response = await api.get(`/catalog/admin/albums/${albumId}/songs`);
+    return response.data;
+  } catch {
+    const fallbackRes = await api.get(`/catalog/public/albums/${albumId}/songs`, { params });
+    return fallbackRes.data;
+  }
 };
 
 /**
- * Lấy chi tiết Album cho Admin (kể cả PENDING)
+ * Cập nhật trạng thái album (Duyệt, Từ chối, Gỡ bỏ)
  * @param {string} albumId - UUID của album
- * @returns {Promise<Object>}
+ * @param {Object} payload - { status: "APPROVED" | "REJECTED" | "TAKEDOWN", rejectionReason?: string }
  */
-export const getAdminAlbumDetailApi = async (albumId) => {
-  const response = await api.get(`/catalog/admin/albums/${albumId}`);
-  return response.data;
-};
-
-/**
- * Lấy danh sách bài hát trong Album cho Admin (kể cả bài hát/album PENDING)
- * @param {string} albumId - UUID của album
- * @returns {Promise<Object>}
- */
-export const getAdminAlbumSongsApi = async (albumId) => {
-  const response = await api.get(`/catalog/admin/albums/${albumId}/songs`);
-  return response.data;
-};
-
-/**
- * Lấy danh sách thể loại nhạc công khai
- * @returns {Promise<Object>}
- */
-export const getPublicGenresApi = async () => {
-  const response = await api.get("/catalog/public/genres");
-  return response.data;
-};
-
-/**
- * Lấy danh sách bài hát công khai (dùng để lấy tổng số bài hát phát hành cho Dashboard)
- * @param {Object} params - { page, size, keyword, genreId, sort }
- * @returns {Promise<Object>}
- */
-export const getPublicSongsApi = async ({ page = 0, size = 10, keyword = "", sort = "createdAt,desc" } = {}) => {
-  const response = await api.get("/catalog/public/songs", {
-    params: { page, size, keyword, sort },
-  });
+export const updateAlbumStatusApi = async (albumId, payload) => {
+  const response = await api.patch(`/catalog/admin/albums/${albumId}/status`, payload);
   return response.data;
 };
 

@@ -15,7 +15,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "follow_artists")
+@Table(name = "follows")
 @IdClass(FollowArtistId.class)
 public class FollowArtist {
     @Id

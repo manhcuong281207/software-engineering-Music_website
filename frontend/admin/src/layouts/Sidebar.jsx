@@ -1,176 +1,164 @@
 import React from "react";
-import { NavLink } from "react-router";
+import { NavLink, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
-  Users,
-  Mic2,
   Music,
   Disc3,
-  Shield,
-  X,
-  LogOut,
-  ShieldCheck,
+  Users,
+  UserCheck,
+  ShieldAlert,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
-import { useAuthStore } from "../store/useAuthStore";
 import { getPendingSongsApi, getPendingAlbumsApi } from "../api/catalog";
 
-const NAV_ITEMS = [
-  {
-    to: "/",
-    label: "Tổng quan",
-    icon: LayoutDashboard,
-    end: true,
-  },
-  {
-    to: "/users",
-    label: "Người dùng",
-    icon: Users,
-  },
-  {
-    to: "/artists",
-    label: "Nghệ sĩ",
-    icon: Mic2,
-  },
-  {
-    to: "/moderation/songs",
-    label: "Duyệt bài hát",
-    icon: Music,
-  },
-  {
-    to: "/moderation/albums",
-    label: "Duyệt album",
-    icon: Disc3,
-  },
-];
+export const Sidebar = () => {
+  const navigate = useNavigate();
 
-export const Sidebar = ({ isOpen, onClose, onOpenLogoutModal }) => {
-  const { admin } = useAuthStore();
-
-  // Badge counts for moderation
-  const { data: songsRes } = useQuery({
-    queryKey: ["adminPendingSongsCount"],
+  // Truy vấn số lượng bài hát & album đang chờ kiểm duyệt để hiển thị badge
+  const { data: songsData } = useQuery({
+    queryKey: ["pendingSongsCount"],
     queryFn: () => getPendingSongsApi({ page: 0, size: 1 }),
+    staleTime: 1000 * 30, // 30 giây
+    refetchInterval: 1000 * 60, // polling mỗi 60 giây
   });
 
-  const { data: albumsRes } = useQuery({
-    queryKey: ["adminPendingAlbumsCount"],
+  const { data: albumsData } = useQuery({
+    queryKey: ["pendingAlbumsCount"],
     queryFn: () => getPendingAlbumsApi({ page: 0, size: 1 }),
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60,
   });
 
-  const pendingSongs = songsRes?.data?.totalElements ?? 0;
-  const pendingAlbums = albumsRes?.data?.totalElements ?? 0;
+  const pendingSongsCount = songsData?.data?.totalElements ?? 0;
+  const pendingAlbumsCount = albumsData?.data?.totalElements ?? 0;
+
+  const navItems = [
+    {
+      to: "/",
+      label: "Tổng quan",
+      icon: LayoutDashboard,
+      end: true,
+    },
+    {
+      to: "/songs",
+      label: "Kiểm duyệt Bài hát",
+      icon: Music,
+      badge: pendingSongsCount > 0 ? pendingSongsCount : null,
+      badgeColor: "bg-[#fa2d48] text-white",
+    },
+    {
+      to: "/albums",
+      label: "Kiểm duyệt Album",
+      icon: Disc3,
+      badge: pendingAlbumsCount > 0 ? pendingAlbumsCount : null,
+      badgeColor: "bg-amber-500 text-black",
+    },
+    {
+      to: "/users",
+      label: "Quản lý Người dùng",
+      icon: Users,
+    },
+    {
+      to: "/artists",
+      label: "Quản lý Nghệ sĩ",
+      icon: UserCheck,
+    },
+  ];
 
   return (
-    <>
-      {/* Mobile Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden"
-          onClick={onClose}
-        />
-      )}
-
-      {/* Sidebar Container */}
-      <aside
-        className={`fixed top-0 bottom-0 left-0 z-40 w-64 bg-[#121212] border-r border-neutral-800/70 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        {/* Logo & Header */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-neutral-800/70 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#fa2d48] flex items-center justify-center shadow-[0_2px_12px_rgba(250,45,72,0.4)]">
-              <Shield size={20} className="text-white" />
-            </div>
-            <div>
-              <span className="font-black text-white text-base tracking-wide">
-                MC MUSIC
-              </span>
-              <span className="block text-[10px] font-bold text-[#fa2d48] tracking-widest uppercase -mt-1">
-                Admin Portal
-              </span>
-            </div>
+    <aside className="w-64 lg:w-72 flex-shrink-0 bg-spotify-base rounded-2xl flex flex-col p-4 justify-between select-none">
+      {/* ── 1. LOGO & BRAND HEADER ── */}
+      <div>
+        <div className="flex items-center gap-3 px-2 py-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-[#fa2d48] flex items-center justify-center shadow-[0_0_20px_rgba(250,45,72,0.4)] flex-shrink-0">
+            <ShieldAlert size={22} className="text-white" />
           </div>
-
-          <button
-            onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
-          >
-            <X size={18} />
-          </button>
+          <div className="min-w-0">
+            <h1 className="text-base font-black text-white tracking-wider truncate">
+              MC MUSIC
+            </h1>
+            <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-[#fa2d48] block truncate">
+              Admin Portal
+            </span>
+          </div>
         </div>
 
-        {/* Navigation Links */}
-        <div className="flex-1 py-6 px-3 space-y-1.5 overflow-y-auto scrollbar-thin">
-          <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+        {/* ── 2. MENU ĐIỀU HƯỚNG CHÍNH ── */}
+        <div className="space-y-1.5">
+          <p className="px-3 text-[11px] font-bold text-neutral-500 uppercase tracking-wider mb-2">
             Hệ thống quản trị
-          </div>
+          </p>
 
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
-            let badge = null;
-            if (item.to === "/moderation/songs" && pendingSongs > 0) badge = pendingSongs;
-            if (item.to === "/moderation/albums" && pendingAlbums > 0) badge = pendingAlbums;
-
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                onClick={onClose}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  `flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group ${
                     isActive
-                      ? "bg-[#fa2d48] text-white shadow-[0_4px_14px_rgba(250,45,72,0.35)]"
-                      : "text-neutral-400 hover:text-white hover:bg-neutral-800/70"
+                      ? "bg-[#fa2d48] text-white shadow-[0_4px_16px_rgba(250,45,72,0.35)] scale-[1.01]"
+                      : "text-spotify-sub hover:text-white hover:bg-neutral-800/60"
                   }`
                 }
               >
-                <Icon size={18} />
-                <span className="flex-1">{item.label}</span>
-                {badge > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    {badge}
-                  </span>
+                {({ isActive }) => (
+                  <>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon
+                        size={18}
+                        className={`transition-colors flex-shrink-0 ${
+                          isActive
+                            ? "text-white"
+                            : "text-neutral-400 group-hover:text-white"
+                        }`}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+
+                    {item.badge !== null && item.badge !== undefined && (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-transform ${
+                          isActive
+                            ? "bg-white text-black"
+                            : item.badgeColor || "bg-neutral-800 text-neutral-300"
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </>
                 )}
               </NavLink>
             );
           })}
         </div>
 
-        {/* Admin Card & Quick Logout Footer */}
-        <div className="p-3 border-t border-neutral-800/70 shrink-0 space-y-2">
-          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-neutral-900/60 border border-neutral-800">
-            <div className="w-8 h-8 rounded-full bg-[#fa2d48]/20 text-[#fa2d48] flex items-center justify-center font-bold text-xs shrink-0">
-              {admin?.fullName ? admin.fullName.charAt(0).toUpperCase() : "A"}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-white truncate">
-                {admin?.fullName || "Quản trị viên"}
-              </div>
-              <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1">
-                <ShieldCheck size={10} className="text-[#fa2d48]" />
-                <span>{admin?.role || "SUPER_ADMIN"}</span>
-              </div>
-            </div>
+        {/* ── 3. THẺ SHORTCUT QUY TẮC KIỂM DUYỆT ── */}
+        <div className="mt-8 p-4 rounded-xl bg-[#181818] border border-white/[0.04] relative overflow-hidden hidden sm:block">
+          <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-[#fa2d48]/10 rounded-full blur-xl pointer-events-none" />
+          <div className="flex items-center gap-2 text-xs font-bold text-[#fa2d48] mb-1.5">
+            <Sparkles size={14} /> Tiêu chuẩn phát hành
           </div>
-
+          <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
+            7 Quy tắc kiểm duyệt bản quyền, âm thanh & siêu dữ liệu bài hát.
+          </p>
           <button
-            type="button"
-            onClick={() => {
-              if (onClose) onClose();
-              if (onOpenLogoutModal) onOpenLogoutModal();
-            }}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+            onClick={() => navigate("/songs")}
+            className="w-full py-2 px-3 rounded-lg bg-[#242424] hover:bg-[#fa2d48] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm group"
           >
-            <LogOut size={14} />
-            <span>Đăng xuất</span>
+            <span>Vào hàng đợi duyệt</span>
+            <ExternalLink size={13} className="group-hover:translate-x-0.5 transition-transform" />
           </button>
         </div>
-      </aside>
-    </>
+      </div>
+    </aside>
   );
 };
 
 export default Sidebar;
+
